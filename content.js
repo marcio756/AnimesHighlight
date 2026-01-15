@@ -1,9 +1,9 @@
 /**
- * Content Script - MAL Highlighter v10.0
- * Suporte: TopAnimes, Goyabu, AnimesOnline, AnimesDigital e Universal
+ * Content Script - MAL Highlighter v12.0 (Overlay System)
+ * Zero impacto no layout do site.
  */
 
-const CACHE_KEY = 'mal_v10_cache';
+const CACHE_KEY = 'mal_v12_cache';
 const CACHE_DURATION = 1000 * 60 * 30; 
 
 const STATUS_MAP = {
@@ -68,108 +68,107 @@ async function getUserList() {
     });
 }
 
-// --- Aplicação Visual ---
-function applyVisuals(element, statusId, isUniversalMode) {
+// --- Aplicação Visual (OVERLAY) ---
+function applyVisuals(element, statusId) {
     if (!STATUS_MAP[statusId]) return;
+
+    // Se já tiver overlay, não faz nada
+    if (element.querySelector('.mal-overlay')) return;
+
+    // Proteção contra elementos gigantes (ex: sliders de fundo)
+    const rect = element.getBoundingClientRect();
+    if (rect.width > window.innerWidth * 0.9) return;
+
     const styleInfo = STATUS_MAP[statusId];
 
-    element.classList.add('mal-item-highlight', styleInfo.class);
-    
-    // Força display block se necessário para a borda aparecer
-    if (isUniversalMode || getComputedStyle(element).display === 'inline') {
-        element.style.display = "inline-block";
-    }
+    // Para o overlay absoluto funcionar, o pai tem de ser relativo
+    // Isto geralmente não afeta o layout visual, apenas o contexto de posicionamento
     if (getComputedStyle(element).position === 'static') {
         element.style.position = 'relative';
     }
 
-    if (!element.querySelector('.mal-label')) {
-        const label = document.createElement('div');
-        label.className = 'mal-label';
-        label.innerText = styleInfo.label;
-        element.appendChild(label);
-    }
+    // Criar o Overlay
+    const overlay = document.createElement('div');
+    overlay.className = `mal-overlay ${styleInfo.class}`;
+    
+    // Criar a Etiqueta dentro do Overlay
+    const label = document.createElement('div');
+    label.className = 'mal-label';
+    label.innerText = styleInfo.label;
+    
+    overlay.appendChild(label);
+    element.appendChild(overlay);
     
     element.dataset.malStatus = statusId;
 }
 
-// --- Comparação ---
-function checkAndApply(element, rawTitle, animeMap, isUniversal) {
-    const animeTitle = normalize(rawTitle);
-    if (!animeTitle) return;
+// --- Algoritmo de Busca Inteligente ---
+function findCardContainer(titleElement) {
+    let current = titleElement.parentElement;
+    let attempts = 0;
+    const MAX_LEVELS_UP = 6; 
 
-    let foundStatus = null;
-    if (animeMap.has(animeTitle)) {
-        foundStatus = animeMap.get(animeTitle);
-    } else {
-        for (let [malTitle, status] of animeMap) {
-            if (malTitle && (animeTitle.includes(malTitle) || malTitle.includes(animeTitle))) {
-                const lenDiff = Math.abs(animeTitle.length - malTitle.length);
-                if (lenDiff <= 3 && malTitle.length > 3) {
-                    foundStatus = status;
-                    break;
+    while (current && attempts < MAX_LEVELS_UP) {
+        if (current.dataset.malStatus || current.querySelector('.mal-overlay')) return current;
+
+        // Procura imagem ou div com background-image (comum no Goyabu)
+        const hasImgTag = current.querySelector('img');
+        const hasBgDiv = current.querySelector('.cover, .poster, .thumb, .contentImg, .coverImg'); 
+
+        if (hasImgTag || hasBgDiv) {
+            // Ignora tags de estrutura macro
+            if (!['BODY', 'HTML', 'MAIN', 'SECTION'].includes(current.tagName)) {
+                return current;
+            }
+        }
+        current = current.parentElement;
+        attempts++;
+    }
+    return null;
+}
+
+// --- Motor Principal ---
+function applyStyles(animeMap) {
+    // Procura todos os possíveis títulos
+    const candidates = document.querySelectorAll('a, span, h1, h2, h3, h4, p, div.title, div.serie, .title_anime');
+
+    candidates.forEach(element => {
+        // Ignora se já estiver dentro de um card processado
+        if (element.closest('[data-mal-status]')) return;
+
+        const text = element.innerText || "";
+        if (text.length < 3) return;
+
+        const animeTitle = normalize(text);
+        if (!animeTitle) return;
+
+        let foundStatus = null;
+        if (animeMap.has(animeTitle)) {
+            foundStatus = animeMap.get(animeTitle);
+        } else {
+            for (let [malTitle, status] of animeMap) {
+                if (malTitle.length > 3 && (animeTitle.includes(malTitle) || malTitle.includes(animeTitle))) {
+                    if (Math.abs(animeTitle.length - malTitle.length) <= 4) {
+                        foundStatus = status;
+                        break;
+                    }
                 }
             }
         }
-    }
 
-    if (foundStatus) {
-        applyVisuals(element, foundStatus, isUniversal);
-    }
-}
-
-// --- MOTOR DE DECISÃO V10 ---
-function applyStyles(animeMap) {
-    
-    // 1. TEMA ANIMES DIGITAL (Novo!)
-    // Estrutura: <div class="itemE"> ... <span class="title_anime">Título</span>
-    const digitalCards = document.querySelectorAll('.itemE');
-    if (digitalCards.length > 0) {
-        digitalCards.forEach(card => {
-            if (card.dataset.malStatus) return;
-            const titleEl = card.querySelector('.title_anime');
-            if (titleEl) checkAndApply(card, titleEl.innerText, animeMap, false);
-        });
-        return; // Encontrou o tema, para aqui.
-    }
-
-    // 2. TEMA DOOPLAY (TopAnimes, AnimesOnline)
-    const dooplayCards = document.querySelectorAll('article.item');
-    if (dooplayCards.length > 0) {
-        dooplayCards.forEach(article => {
-            if (article.dataset.malStatus) return;
-            const titleEl = article.querySelector('.serie') || article.querySelector('.title') || article.querySelector('h3');
-            if (titleEl) checkAndApply(article, titleEl.innerText, animeMap, false);
-        });
-        return;
-    }
-
-    // 3. TEMA CRONOS (Goyabu)
-    const cronosCards = document.querySelectorAll('article.boxEP');
-    if (cronosCards.length > 0) {
-        cronosCards.forEach(article => {
-            if (article.dataset.malStatus) return;
-            const titleEl = article.querySelector('.title');
-            if (titleEl) checkAndApply(article, titleEl.innerText, animeMap, false);
-        });
-        return;
-    }
-
-    // 4. FALLBACK UNIVERSAL (Outros sites desconhecidos)
-    const potentialCards = document.querySelectorAll('a');
-    potentialCards.forEach(link => {
-        if (link.dataset.malStatus) return;
-        const hasImg = link.querySelector('img');
-        if (!hasImg) return;
-        let rawText = link.getAttribute('title') || link.innerText || hasImg.alt;
-        checkAndApply(link, rawText, animeMap, true);
+        if (foundStatus) {
+            const cardContainer = findCardContainer(element);
+            if (cardContainer) {
+                applyVisuals(cardContainer, foundStatus);
+            }
+        }
     });
 }
 
 // --- Inicialização ---
 (async () => {
-    // Limpeza de cache de versões antigas
-    if (localStorage.getItem('mal_v9_cache')) localStorage.removeItem('mal_v9_cache');
+    // Limpeza cache
+    if (localStorage.getItem('mal_v11_cache')) localStorage.removeItem('mal_v11_cache');
 
     const animeMap = await getUserList();
     if (animeMap.size > 0) {

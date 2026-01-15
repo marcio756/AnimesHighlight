@@ -1,60 +1,64 @@
-/*
- * ESTILOS GERAIS
+/* * MAL Highlighter - Overlay System
+ * Garante que o layout do site nunca é afetado.
  */
-.mal-item-highlight {
-    position: relative !important;
-    border-radius: 4px;
+
+.mal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 50; /* Fica por cima da imagem */
+    pointer-events: none; /* CRÍTICO: Deixa os cliques passarem para o link */
+    box-sizing: border-box;
+    border-radius: inherit; /* Copia o arredondamento do cartão original */
     transition: all 0.2s ease;
 }
 
-/* Etiqueta Comum */
+/* Etiqueta dentro do Overlay */
 .mal-label {
     position: absolute;
-    top: 6px;
-    left: 6px;
+    top: 0;
+    right: 0; /* Mudei para a direita, geralmente atrapalha menos */
     color: white;
     font-size: 10px;
-    padding: 2px 5px;
-    z-index: 999;
-    border-radius: 3px;
+    padding: 2px 6px;
+    border-bottom-left-radius: 4px;
     font-weight: bold;
-    pointer-events: none;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
     text-transform: uppercase;
+    box-shadow: -1px 1px 2px rgba(0,0,0,0.3);
 }
 
-/*
- * CORES POR ESTADO
+/* * CORES (Aplicadas ao Overlay)
  */
 
 /* 1. WATCHING (Verde) */
 .mal-watching {
-    box-shadow: inset 0 0 0 4px #2db039, 0 0 15px rgba(45, 176, 57, 0.4) !important;
+    box-shadow: inset 0 0 0 4px #2db039, inset 0 0 20px rgba(45, 176, 57, 0.2);
 }
 .mal-watching .mal-label { background: #2db039; }
 
-/* 2. COMPLETED (Azul Escuro) */
+/* 2. COMPLETED (Azul) */
 .mal-completed {
-    box-shadow: inset 0 0 0 4px #26448f !important;
-    opacity: 0.8; /* Ligeiramente mais discreto pois já viste */
+    box-shadow: inset 0 0 0 4px #26448f, inset 0 0 20px rgba(38, 68, 143, 0.2);
 }
 .mal-completed .mal-label { background: #26448f; }
 
 /* 3. PLAN TO WATCH (Cinzento) */
 .mal-plan {
-    box-shadow: inset 0 0 0 4px #787878 !important;
+    box-shadow: inset 0 0 0 4px #787878;
 }
 .mal-plan .mal-label { background: #787878; }
 
 /* 4. ON HOLD (Amarelo) */
 .mal-hold {
-    box-shadow: inset 0 0 0 4px #f1c83e !important;
+    box-shadow: inset 0 0 0 4px #f1c83e;
 }
-.mal-hold .mal-label { background: #f1c83e; color: #333; /* Texto escuro para ler melhor no amarelo */ }
+.mal-hold .mal-label { background: #f1c83e; color: #333; }
 
 /* 5. DROPPED (Vermelho) */
 .mal-dropped {
-    box-shadow: inset 0 0 0 4px #a12f31 !important;
-    filter: grayscale(100%); /* Fica a preto e branco para indicar que "morreu" para ti */
+    box-shadow: inset 0 0 0 4px #a12f31;
+    background-color: rgba(0,0,0,0.6); /* Escurece o anime que dropaste */
 }
 .mal-dropped .mal-label { background: #a12f31; }

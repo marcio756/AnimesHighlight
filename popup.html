@@ -2,7 +2,7 @@
 <html>
 <head>
     <style>
-        body { width: 280px; padding: 15px; font-family: 'Segoe UI', sans-serif; text-align: center; }
+        body { width: 280px; padding: 15px; font-family: 'Segoe UI', sans-serif; text-align: center; color: #333; }
         h3 { margin-top: 0; color: #2e51a2; margin-bottom: 15px; }
         
         .input-group { text-align: left; margin-bottom: 15px; }
@@ -17,7 +17,6 @@
         button:hover { background: #223f82; }
         button:disabled { background: #ccc; cursor: not-allowed; }
 
-        /* Área do Perfil */
         .profile-area { margin-top: 15px; display: none; padding: 10px; background: #f4f4f4; border-radius: 8px; }
         .avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #2e51a2; margin-bottom: 5px; }
         .welcome { font-size: 13px; color: #333; font-weight: 600; }
@@ -25,23 +24,27 @@
         .status { margin-top: 10px; font-size: 12px; min-height: 15px; }
         .error { color: #d32f2f; }
         .success { color: #2e7d32; }
+        
+        .footer { margin-top: 15px; font-size: 10px; color: #999; }
     </style>
 </head>
 <body>
-    <h3>MAL Config</h3>
+    <h3>MAL Highlighter</h3>
     
     <div class="input-group">
-        <label>Nome de Utilizador MAL:</label>
-        <input type="text" id="username" placeholder="Ex: marcio756">
+        <label>MyAnimeList Username:</label>
+        <input type="text" id="username" placeholder="e.g. marcio756">
     </div>
 
-    <button id="saveBtn">Verificar e Guardar</button>
+    <button id="saveBtn">Verify & Save</button>
     <div id="status" class="status"></div>
 
     <div id="profileArea" class="profile-area">
         <img id="avatar" class="avatar" src="" alt="Profile">
         <div class="welcome" id="welcomeText"></div>
     </div>
+    
+    <div class="footer">Universal Version 1.0</div>
 
     <script src="popup.js"></script>
 </body>

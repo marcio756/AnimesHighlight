@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const avatar = document.getElementById('avatar');
     const welcomeText = document.getElementById('welcomeText');
 
-    // 1. Carregar dados guardados
+    // 1. Load saved data
     chrome.storage.local.get(['malUsername', 'malAvatar'], (result) => {
         if (result.malUsername) {
             input.value = result.malUsername;
@@ -16,51 +16,54 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 2. Botão Guardar
+    // 2. Save Button Action
     saveBtn.addEventListener('click', async () => {
         const username = input.value.trim();
         if (!username) return;
 
         saveBtn.disabled = true;
-        saveBtn.innerText = "A verificar...";
+        saveBtn.innerText = "Verifying...";
         status.className = "status";
         status.innerText = "";
         profileArea.style.display = 'none';
 
         try {
-            // Verifica se o user existe via Jikan API
+            // Verify via Jikan API
             const response = await fetch(`https://api.jikan.moe/v4/users/${username}`);
             
             if (!response.ok) {
-                throw new Error('Utilizador não encontrado');
+                throw new Error('User not found');
             }
 
             const data = await response.json();
             const imageUrl = data.data.images.jpg.image_url;
 
-            // SUCESSO: Guarda na memória do Chrome
+            // Success: Save to storage
             chrome.storage.local.set({ 
                 malUsername: username,
                 malAvatar: imageUrl 
             }, () => {
-                status.innerText = "Guardado com sucesso!";
+                status.innerText = "Saved successfully!";
                 status.className = "status success";
                 showProfile(username, imageUrl);
                 saveBtn.disabled = false;
-                saveBtn.innerText = "Verificar e Guardar";
+                saveBtn.innerText = "Verify & Save";
+                
+                // Clear cache to force update on next load
+                localStorage.removeItem('mal_v12_cache');
             });
 
         } catch (error) {
-            status.innerText = "Erro: Utilizador inválido ou API indisponível.";
+            status.innerText = "Error: User not found or API issue.";
             status.className = "status error";
             saveBtn.disabled = false;
-            saveBtn.innerText = "Verificar e Guardar";
+            saveBtn.innerText = "Verify & Save";
         }
     });
 
     function showProfile(name, imgUrl) {
         avatar.src = imgUrl;
-        welcomeText.innerText = `Olá, ${name}!`;
+        welcomeText.innerText = `Hello, ${name}!`;
         profileArea.style.display = 'block';
     }
 });
