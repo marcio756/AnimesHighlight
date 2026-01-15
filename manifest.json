@@ -1,13 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "TopAnimes - MAL Highlighter",
-  "version": "5.0",
-  "description": "Sincroniza o TopAnimes com o teu MyAnimeList",
+  "name": "Universal MAL Highlighter",
+  "version": "6.0",
+  "description": "Destaca animes do MAL em QUALQUER site de streaming.",
   "permissions": ["storage"],
   "host_permissions": [
-    "https://topanimes.net/*",
-    "https://myanimelist.net/*",
-    "https://api.jikan.moe/*"
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -18,7 +16,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://topanimes.net/*"],
+      "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["styles.css"]
     }

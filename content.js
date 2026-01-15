@@ -1,10 +1,10 @@
 /**
- * Content Script - TopAnimes Direct MAL
- * Versão: 5.0 (Smart Cache & Identity Check)
+ * Content Script - MAL Highlighter v10.0
+ * Suporte: TopAnimes, Goyabu, AnimesOnline, AnimesDigital e Universal
  */
 
-const CACHE_KEY = 'mal_smart_cache_v5';
-const CACHE_DURATION = 1000 * 60 * 30; // 30 Minutos
+const CACHE_KEY = 'mal_v10_cache';
+const CACHE_DURATION = 1000 * 60 * 30; 
 
 const STATUS_MAP = {
     1: { class: 'mal-watching', label: 'WATCHING' },
@@ -16,7 +16,7 @@ const STATUS_MAP = {
 
 // --- Helpers ---
 const normalize = (str) => {
-    if (str === null || str === undefined) return "";
+    if (!str || str.length < 3) return "";
     return String(str).toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/\(tv\)|\(movie\)|legendado|dublado|episodio|filme|[0-9]+ª|temporada|season|final|part|cour/g, "")
@@ -31,22 +31,16 @@ function getUsername() {
     });
 }
 
-// --- Lógica Principal de Dados ---
+// --- Dados ---
 async function getUserList() {
     const USERNAME = await getUsername();
     const cached = localStorage.getItem(CACHE_KEY);
     
-    // VERIFICAÇÃO DE INTEGRIDADE DA CACHE
     if (cached) {
         try {
             const { timestamp, data, owner } = JSON.parse(cached);
-            
-            // Verifica validade temporal E se o dono da cache é o utilizador atual
-            // Se o dono for diferente (trocaste de user), a cache é ignorada
             if ((Date.now() - timestamp < CACHE_DURATION) && owner === USERNAME) {
                 return new Map(data); 
-            } else {
-                console.log("[MAL] Cache expirada ou de outro utilizador. A recarregar...");
             }
         } catch (e) { localStorage.removeItem(CACHE_KEY); }
     }
@@ -61,10 +55,9 @@ async function getUserList() {
                     if (title) animeMap.set(normalize(title), item.status);
                 });
                 
-                // GUARDAMOS TAMBÉM O 'OWNER' (DONO) DA LISTA
                 localStorage.setItem(CACHE_KEY, JSON.stringify({
                     timestamp: Date.now(),
-                    owner: USERNAME, // <--- Fundamental para a troca funcionar
+                    owner: USERNAME,
                     data: Array.from(animeMap.entries())
                 }));
                 resolve(animeMap);
@@ -75,56 +68,109 @@ async function getUserList() {
     });
 }
 
-// --- Lógica de UI ---
-function applyStyles(animeMap) {
-    const articles = document.querySelectorAll('article.item');
-    articles.forEach(article => {
-        // Se mudarmos de user, queremos reprocessar tudo, por isso removemos a verificação simples de dataset
-        // Mas para performance, verificamos se o status atual bate certo com o novo mapa
-        
-        const titleElement = article.querySelector('.serie');
-        if (!titleElement) return;
-        
-        const animeTitle = normalize(titleElement.innerText);
-        if (!animeTitle) return;
-        
-        let foundStatus = null;
-        if (animeMap.has(animeTitle)) {
-            foundStatus = animeMap.get(animeTitle);
-        } else {
-            for (let [malTitle, status] of animeMap) {
-                if (malTitle && (animeTitle.includes(malTitle) || malTitle.includes(animeTitle))) {
-                    const lenDiff = Math.abs(animeTitle.length - malTitle.length);
-                    if (lenDiff <= 3 && malTitle.length > 3) {
-                        foundStatus = status;
-                        break;
-                    }
+// --- Aplicação Visual ---
+function applyVisuals(element, statusId, isUniversalMode) {
+    if (!STATUS_MAP[statusId]) return;
+    const styleInfo = STATUS_MAP[statusId];
+
+    element.classList.add('mal-item-highlight', styleInfo.class);
+    
+    // Força display block se necessário para a borda aparecer
+    if (isUniversalMode || getComputedStyle(element).display === 'inline') {
+        element.style.display = "inline-block";
+    }
+    if (getComputedStyle(element).position === 'static') {
+        element.style.position = 'relative';
+    }
+
+    if (!element.querySelector('.mal-label')) {
+        const label = document.createElement('div');
+        label.className = 'mal-label';
+        label.innerText = styleInfo.label;
+        element.appendChild(label);
+    }
+    
+    element.dataset.malStatus = statusId;
+}
+
+// --- Comparação ---
+function checkAndApply(element, rawTitle, animeMap, isUniversal) {
+    const animeTitle = normalize(rawTitle);
+    if (!animeTitle) return;
+
+    let foundStatus = null;
+    if (animeMap.has(animeTitle)) {
+        foundStatus = animeMap.get(animeTitle);
+    } else {
+        for (let [malTitle, status] of animeMap) {
+            if (malTitle && (animeTitle.includes(malTitle) || malTitle.includes(animeTitle))) {
+                const lenDiff = Math.abs(animeTitle.length - malTitle.length);
+                if (lenDiff <= 3 && malTitle.length > 3) {
+                    foundStatus = status;
+                    break;
                 }
             }
         }
+    }
 
-        // Limpeza de classes antigas (caso mudes de user e o status mude)
-        article.classList.remove('mal-item-highlight', 'mal-watching', 'mal-completed', 'mal-hold', 'mal-dropped', 'mal-plan');
-        const existingLabel = article.querySelector('.mal-label');
-        if (existingLabel) existingLabel.remove();
+    if (foundStatus) {
+        applyVisuals(element, foundStatus, isUniversal);
+    }
+}
 
-        if (foundStatus && STATUS_MAP[foundStatus]) {
-            const styleInfo = STATUS_MAP[foundStatus];
-            article.classList.add('mal-item-highlight', styleInfo.class);
-            
-            const label = document.createElement('div');
-            label.className = 'mal-label';
-            label.innerText = styleInfo.label;
-            article.appendChild(label);
-            
-            article.dataset.malStatus = foundStatus;
-        }
+// --- MOTOR DE DECISÃO V10 ---
+function applyStyles(animeMap) {
+    
+    // 1. TEMA ANIMES DIGITAL (Novo!)
+    // Estrutura: <div class="itemE"> ... <span class="title_anime">Título</span>
+    const digitalCards = document.querySelectorAll('.itemE');
+    if (digitalCards.length > 0) {
+        digitalCards.forEach(card => {
+            if (card.dataset.malStatus) return;
+            const titleEl = card.querySelector('.title_anime');
+            if (titleEl) checkAndApply(card, titleEl.innerText, animeMap, false);
+        });
+        return; // Encontrou o tema, para aqui.
+    }
+
+    // 2. TEMA DOOPLAY (TopAnimes, AnimesOnline)
+    const dooplayCards = document.querySelectorAll('article.item');
+    if (dooplayCards.length > 0) {
+        dooplayCards.forEach(article => {
+            if (article.dataset.malStatus) return;
+            const titleEl = article.querySelector('.serie') || article.querySelector('.title') || article.querySelector('h3');
+            if (titleEl) checkAndApply(article, titleEl.innerText, animeMap, false);
+        });
+        return;
+    }
+
+    // 3. TEMA CRONOS (Goyabu)
+    const cronosCards = document.querySelectorAll('article.boxEP');
+    if (cronosCards.length > 0) {
+        cronosCards.forEach(article => {
+            if (article.dataset.malStatus) return;
+            const titleEl = article.querySelector('.title');
+            if (titleEl) checkAndApply(article, titleEl.innerText, animeMap, false);
+        });
+        return;
+    }
+
+    // 4. FALLBACK UNIVERSAL (Outros sites desconhecidos)
+    const potentialCards = document.querySelectorAll('a');
+    potentialCards.forEach(link => {
+        if (link.dataset.malStatus) return;
+        const hasImg = link.querySelector('img');
+        if (!hasImg) return;
+        let rawText = link.getAttribute('title') || link.innerText || hasImg.alt;
+        checkAndApply(link, rawText, animeMap, true);
     });
 }
 
 // --- Inicialização ---
 (async () => {
-    // Inicia processo
+    // Limpeza de cache de versões antigas
+    if (localStorage.getItem('mal_v9_cache')) localStorage.removeItem('mal_v9_cache');
+
     const animeMap = await getUserList();
     if (animeMap.size > 0) {
         applyStyles(animeMap);
