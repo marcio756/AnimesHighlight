@@ -1,9 +1,9 @@
 /**
- * Content Script - MAL Highlighter v29.3 (Normalization Order Fix)
- * Correção Crítica:
- * A remoção de acentos foi movida para o INÍCIO da função 'normalize'.
- * Antes: "Episódio 18" -> Regex falhava (procurava 'episodio') -> API recebia lixo.
- * Agora: "Episódio 18" -> Vira "episodio 18" -> Regex apaga -> API recebe limpo.
+ * Content Script - MAL Highlighter v29.4 (Specifics Restore)
+ * Correção Final:
+ * 1. Removidos "hen", "arc", "chapter" da Blacklist. Estas palavras são cruciais
+ * para distinguir arcos específicos (ex: Winter-hen) da série principal.
+ * 2. Mantém a correção de acentos da v29.3.
  */
 
 const CACHE_KEY = 'mal_v26_enhanced'; 
@@ -32,36 +32,43 @@ const STATUS_MAP = {
 };
 
 /**
- * Advanced Normalization Strategy v4 (Correct Order)
+ * Advanced Normalization Strategy v5 (Precision Tuning)
  */
 const normalize = (str) => {
     if (!str || str.length < 3) return "";
     
     let clean = String(str).toLowerCase();
 
-    // 1. REMOVER ACENTOS (MOVIDO PARA O TOPO)
-    // Isto garante que "Episódio" vira "episodio" ANTES de tentarmos remover a palavra.
+    // 1. REMOVER ACENTOS (Prioridade Máxima)
     clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    // 2. Remover Episódios (Agora funciona mesmo com "Episódio")
+    // 2. Remover Episódios
     clean = clean.replace(/\b(episodio|episode|ep|e)\s*[0-9]+\b/g, " ");
 
     // 3. Normalizar Ordinais
     clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1");
 
-    // 4. Remover Hífens SEPARADORES
+    // 4. Remover Hífens SEPARADORES (Espaço - Espaço)
     clean = clean.replace(/\s+-\s+/g, " ");
 
     // 5. Limpar outros separadores
     clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
 
-    // 6. STOP WORDS
-    const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|[0-9]+ª|online|ver|assistir|season|temp|parte|part|net|com|br|org|hd|fhd|4k|q1n|hen|arc|chapter|capitulo)\b/g;
+    // 6. STOP WORDS (REMOVIDO: hen, arc, chapter - são necessários!)
+    // Mantemos apenas lixo genérico de sites.
+    const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|[0-9]+ª|online|ver|assistir|season|temp|parte|part|net|com|br|org|hd|fhd|4k|q1n|capitulo)\b/g;
     clean = clean.replace(ignoreRegex, " ");
 
     // 7. Limpeza Final
-    return clean.replace(/[^a-z0-9\s\-]/g, "")
-                .replace(/\s+/g, " ").trim();
+    // Garante que não ficam hífens pendurados no fim (ex: "Winter-")
+    clean = clean.replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
+    
+    // Remove hífen se for o último caracter
+    if (clean.endsWith('-')) {
+        clean = clean.slice(0, -1);
+    }
+    
+    return clean.trim();
 };
 
 function getSlugFromUrl() {
@@ -74,7 +81,7 @@ function getSlugFromUrl() {
     
     if (UI_BLOCKLIST.includes(lastSegment) || /page\d+/.test(lastSegment)) return null;
 
-    // Converte hífens em espaços para o URL Slug
+    // URL Slug: Substituir hífens por espaço
     return lastSegment.replace(/-/g, ' ');
 }
 
@@ -274,24 +281,39 @@ function searchAndShowPanel(rawTitle) {
         isSearching = false;
         document.body.style.cursor = 'default';
         
-        if (response && response.success) {
-            const anime = response.anime;
-            const animeTitleNorm = normalize(anime.title);
+        if (response && response.success && response.results) {
             
-            if (!isFuzzyMatch(cleanQuery, animeTitleNorm)) {
-                // Mensagem de log mais clara para saberes que é normal
-                console.log(`[MAL Highlighter] SafeGuard Active: API returned "${animeTitleNorm}" for query "${cleanQuery}". Rejected to prevent false positive.`);
-                return; 
+            // LÓGICA DE SELEÇÃO DO MELHOR CANDIDATO
+            let bestMatch = null;
+
+            // Percorre os 5 resultados vindos da API
+            for (const anime of response.results) {
+                const animeTitleNorm = normalize(anime.title);
+                
+                // O primeiro que passar na validação rigorosa ganha
+                if (isFuzzyMatch(cleanQuery, animeTitleNorm)) {
+                    bestMatch = anime;
+                    break; // Encontrámos! Parar de procurar.
+                } else {
+                    console.log(`[MAL Highlighter] Rejected candidate: "${animeTitleNorm}" for query "${cleanQuery}"`);
+                }
             }
 
+            // Se nenhum dos 5 servir (SafeGuard total)
+            if (!bestMatch) {
+                console.warn(`[MAL Highlighter] SafeGuard: All 5 API results rejected for query "${cleanQuery}".`);
+                return;
+            }
+
+            // Processa o vencedor
             let finalStatus = null;
             for (let [key, val] of globalAnimeMap.entries()) {
-                if (val.id === anime.mal_id) {
+                if (val.id === bestMatch.mal_id) {
                     finalStatus = val.status;
                     break;
                 }
             }
-            showPanel(anime.title, { id: anime.mal_id, status: finalStatus });
+            showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus });
         }
     });
 }
