@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         profileArea.style.display = 'none';
 
         try {
-            // Verify via Jikan API
+            // Step 1: Check if user exists via Jikan API
             const response = await fetch(`https://api.jikan.moe/v4/users/${username}`);
             
             if (!response.ok) {
@@ -38,23 +38,36 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             const imageUrl = data.data.images.jpg.image_url;
 
-            // Success: Save to storage
-            chrome.storage.local.set({ 
-                malUsername: username,
-                malAvatar: imageUrl 
-            }, () => {
-                status.innerText = "Saved successfully!";
-                status.className = "status success";
-                showProfile(username, imageUrl);
-                saveBtn.disabled = false;
-                saveBtn.innerText = "Verify & Save";
-                
-                // Clear cache to force update on next load
-                localStorage.removeItem('mal_v12_cache');
+            // Step 2: Check if Profile/List is Public
+            // Tenta obter a lista via background. Se falhar, é porque é privada.
+            chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: username }, (malResponse) => {
+                if (malResponse && malResponse.success) {
+                    // SUCESSO: Perfil Público -> Guardar
+                    chrome.storage.local.set({ 
+                        malUsername: username,
+                        malAvatar: imageUrl 
+                    }, () => {
+                        status.innerText = "Saved successfully!";
+                        status.className = "status success";
+                        showProfile(username, imageUrl);
+                        saveBtn.disabled = false;
+                        saveBtn.innerText = "Verify & Save";
+                        
+                        // Limpar cache para forçar atualização imediata
+                        localStorage.removeItem('mal_v24_clean');
+                        localStorage.removeItem('mal_v25_clean');
+                    });
+                } else {
+                    // FALHA: Perfil Privado ou Erro de Rede
+                    status.innerText = "Your MAL Profile is private. Please make it public to use this extension.";
+                    status.className = "status error";
+                    saveBtn.disabled = false;
+                    saveBtn.innerText = "Verify & Save";
+                }
             });
 
         } catch (error) {
-            status.innerText = "Error: User not found or API issue.";
+            status.innerText = "Error: User not found.";
             status.className = "status error";
             saveBtn.disabled = false;
             saveBtn.innerText = "Verify & Save";

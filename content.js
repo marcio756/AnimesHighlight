@@ -1,11 +1,21 @@
 /**
- * Content Script - MAL Highlighter v23.0
- * Correção: Mantém palavras como "Final", "Season", "Part" para distinguir temporadas.
- * Feature: Logs detalhados na consola para debug do utilizador.
+ * Content Script - MAL Highlighter v28.3 (Sequel Precision)
+ * Correção: Lógica de comparação (isFuzzyMatch) alterada para Jaccard Index.
+ * Impede que "Golden Kamuy" (Prequela) seja detetado como match para 
+ * "Golden Kamuy: Saishuushou" (Sequela), forçando a procura correta na API.
  */
 
-const CACHE_KEY = 'mal_v23_precision';
+const CACHE_KEY = 'mal_v26_enhanced'; 
 const CACHE_DURATION = 1000 * 60 * 15; 
+
+// Blocklist de UI (Mantida da v28.2)
+const UI_BLOCKLIST = [
+    "selecione um", "player de video", "comentarios", "relacionados", 
+    "episodios", "lancamentos", "parceiros", "dmca", "termos", 
+    "login", "registrar", "assistir", "online", "download", 
+    "animes online", "todos os direitos", "copyright", "proximo episodio",
+    "episodio anterior", "lista de animes", "generos", "contato"
+];
 
 let globalAnimeMap = new Map();
 let observer = null;
@@ -19,33 +29,19 @@ const STATUS_MAP = {
     6: { class: 'mal-plan', label: 'PLAN TO WATCH' }
 };
 
-// --- LOGGING ---
-function logDebug(title, msg, data = '') {
-    console.log(
-        `%c[MAL] ${title}%c ${msg}`, 
-        'color: #2db039; font-weight: bold;', 
-        'color: #aaa;', 
-        data
-    );
-}
-
-// --- NORMALIZAÇÃO (CORRIGIDA) ---
 const normalize = (str) => {
     if (!str || str.length < 3) return "";
     
-    // LISTA NEGRA ATUALIZADA:
-    // Removi: 'season', 'final', 'part', 'cour' (Eles são importantes!)
-    // Mantive: lixo de sites de streaming
-    const ignoreRegex = /\(tv\)|\(movie\)|legendado|dublado|dubbed|dub|episodio|episode|filme|[0-9]+ª|online|ver|assistir/g;
-    
-    let cleaned = String(str).toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove acentos
-        .replace(ignoreRegex, " ")                         // Remove palavras proibidas
-        .replace(/[^a-z0-9\s]/g, " ")                      // Remove símbolos estranhos
-        .replace(/\s+[0-9]+$/, "")                         // Remove número do episódio no fim
-        .replace(/\s+/g, " ").trim();                      // Limpa espaços duplos
-        
-    return cleaned;
+    let clean = String(str).toLowerCase()
+        .replace(/[\[\]\(\)\-\_\.]/g, " "); 
+
+    clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|episodio|episode|ep|filme|[0-9]+ª|online|ver|assistir|season|temp|parte|part)\b/g;
+    clean = clean.replace(ignoreRegex, " ");
+
+    return clean.replace(/[^a-z0-9\s]/g, "")
+                .replace(/\s+/g, " ").trim();
 };
 
 function getUsername() {
@@ -81,7 +77,8 @@ async function getUserList() {
                         if (title) newMap.set(normalize(title), {
                             status: item.status,
                             id: item.anime_id,
-                            score: item.score
+                            score: item.score,
+                            rawTitle: title
                         });
                     });
                     localStorage.setItem(CACHE_KEY, JSON.stringify({
@@ -98,7 +95,7 @@ async function getUserList() {
     return mapToReturn;
 }
 
-// --- VISUAIS ---
+// --- VISUALS ---
 function applyVisuals(element, statusId) {
     if (element.classList.contains('mal-item-highlight')) return;
     const styleInfo = STATUS_MAP[statusId];
@@ -112,18 +109,32 @@ function applyVisuals(element, statusId) {
 function findCardContainer(titleElement) {
     let current = titleElement.parentElement;
     let attempts = 0;
+    
     while (current && attempts < 6) {
         if (current.dataset.malStatus) return current;
-        const hasImg = current.querySelector('img') || current.querySelector('.cover, .poster, .thumb, .contentImg, .coverImg');
-        const isStructuralTag = ['BODY', 'HTML', 'MAIN', 'ASIDE', 'SECTION', 'UL'].includes(current.tagName);
-        if (hasImg && !isStructuralTag) return current;
+
+        const imgCount = current.querySelectorAll('img').length;
+        const linkCount = current.querySelectorAll('a').length;
+
+        if (imgCount > 2 || linkCount > 4) return null;
+
+        const hasImg = current.querySelector('img') || 
+                       current.querySelector('.cover, .poster, .thumb, .contentImg, .coverImg') ||
+                       (window.getComputedStyle(current).backgroundImage !== 'none');
+
+        const isStructuralTag = ['BODY', 'HTML', 'MAIN', 'SECTION', 'DIV#content', 'DIV.container'].includes(current.tagName + (current.id ? '#'+current.id : ''));
+        const isCardTag = ['ARTICLE', 'LI'].includes(current.tagName);
+
+        if ((hasImg || isCardTag) && !isStructuralTag) {
+            if (current.offsetWidth < window.innerWidth * 0.95) return current;
+        }
         current = current.parentElement;
         attempts++;
     }
     return null;
 }
 
-// --- PAINEL ---
+// --- PANEL LOGIC ---
 let currentAnimeId = null; 
 let isSearching = false; 
 
@@ -142,7 +153,7 @@ function createPanel() {
     document.body.appendChild(panel);
     document.getElementById('malOpenBtn').onclick = () => {
         if (currentAnimeId) window.open(`https://myanimelist.net/anime/${currentAnimeId}`, '_blank');
-        else alert("Anime não encontrado.");
+        else alert("Anime not found.");
     };
 }
 
@@ -180,31 +191,67 @@ function getStatusColor(status) {
     }
 }
 
+/**
+ * REFACTORED: Strict Token Comparison (Jaccard Index)
+ * Corrige o problema onde "Golden Kamuy" dava match com "Golden Kamuy: Saishuushou".
+ */
+function isFuzzyMatch(siteTitle, malTitle) {
+    // 1. Exact Match (Fastest)
+    if (siteTitle === malTitle) return true;
+
+    // 2. Substring Check (Strict)
+    // Só aceita diferenças minúsculas (ex: 4 letras), para prevenir
+    // que "Anime X" capture "Anime X: Sequel Y".
+    if (malTitle.includes(siteTitle) || siteTitle.includes(malTitle)) {
+        if (Math.abs(malTitle.length - siteTitle.length) <= 4) return true;
+    }
+
+    const tokensSite = siteTitle.split(' ').filter(t => t.length > 1);
+    const tokensMal = malTitle.split(' ').filter(t => t.length > 1);
+    
+    if (tokensSite.length === 0 || tokensMal.length === 0) return false;
+
+    // 3. Jaccard Index Calculation
+    // Intersection (palavras comuns) / Union (total palavras únicas)
+    // Ex: "A B" vs "A B C" -> Intersect: 2, Union: 3 -> 0.66 (Reprovado, precisa de 0.75)
+    
+    const allTokens = new Set([...tokensSite, ...tokensMal]); // Union
+    let matches = 0;
+    
+    tokensSite.forEach(token => {
+        if (tokensMal.includes(token)) matches++;
+    });
+
+    const ratio = matches / allTokens.size;
+
+    // Se tiver poucas palavras, exige perfeição. Se tiver muitas, aceita 75%.
+    return ratio >= (allTokens.size < 3 ? 1.0 : 0.75);
+}
+
 function searchAndShowPanel(rawTitle) {
     if (isSearching) return;
     if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
     
+    const cleanQuery = normalize(rawTitle);
+    if (cleanQuery.length < 4) return;
+    
     isSearching = true;
     document.body.style.cursor = 'wait';
-    
-    const cleanQuery = normalize(rawTitle);
-    
-    // LOG DE DEBUG PARA O UTILIZADOR
-    logDebug("Pesquisa API", `Original: "${rawTitle}" -> Pesquisado: "${cleanQuery}"`);
-
-    if (cleanQuery.length < 4) {
-        isSearching = false;
-        document.body.style.cursor = 'default';
-        return;
-    }
 
     chrome.runtime.sendMessage({ action: "SEARCH_ANIME", title: cleanQuery }, (response) => {
         isSearching = false;
         document.body.style.cursor = 'default';
+        
         if (response && response.success) {
             const anime = response.anime;
-            logDebug("API Resposta", `Encontrado: "${anime.title}" (ID: ${anime.mal_id})`);
+            const animeTitleNorm = normalize(anime.title);
             
+            // Validation using the new stricter logic
+            if (!isFuzzyMatch(cleanQuery, animeTitleNorm)) {
+                console.warn(`[MAL Highlighter] Mismatch ignored: "${cleanQuery}" vs "${animeTitleNorm}"`);
+                return; 
+            }
+
             let finalStatus = null;
             for (let [key, val] of globalAnimeMap.entries()) {
                 if (val.id === anime.mal_id) {
@@ -213,41 +260,42 @@ function searchAndShowPanel(rawTitle) {
                 }
             }
             showPanel(anime.title, { id: anime.mal_id, status: finalStatus });
-        } else {
-            logDebug("API Erro", "Nenhum anime encontrado.");
         }
     });
 }
 
-// --- LÓGICA PRINCIPAL ---
+// --- MAIN LOGIC ---
 function processPage() {
-    const candidates = document.querySelectorAll('a, span, h1, h2, h3, h4, p, div.title, div.serie, .title_anime');
-    let foundMainAnime = false; 
+    const selector = 'a, span, h1, h2, h3, h4, h5, h6, p, div.title, div.serie, .title_anime, strong, b, article, li';
+    const candidates = document.querySelectorAll(selector);
+    
+    let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible');
+    let foundMainAnime = panelVisible; 
 
     candidates.forEach(element => {
         if (element.closest('[data-mal-status]')) return;
-        if (!element.offsetParent) return; 
+        if (element.offsetParent === null) return; 
         
         const text = element.innerText || "";
         if (text.length < 3) return;
         
+        const lowerText = text.toLowerCase();
+
+        // 1. BLOCKLIST CHECK
+        if (UI_BLOCKLIST.some(term => lowerText.includes(term))) return;
+
         const animeTitle = normalize(text);
         if (!animeTitle || animeTitle.length < 3) return;
 
-        // 1. Check na Lista
+        // 2. Local Cache Check
         let match = null;
         if (globalAnimeMap.has(animeTitle)) {
             match = globalAnimeMap.get(animeTitle);
         } else {
              for (let [malTitle, data] of globalAnimeMap) {
-                const t1 = animeTitle.replace(/\s/g, "");
-                const t2 = malTitle.replace(/\s/g, "");
-                if (t1.includes(t2) || t2.includes(t1)) {
-                    // Match Aproximado
-                    if (Math.abs(t1.length - t2.length) <= 5) {
-                        match = data;
-                        break;
-                    }
+                if (isFuzzyMatch(animeTitle, malTitle)) {
+                    match = data;
+                    break;
                 }
             }
         }
@@ -257,27 +305,29 @@ function processPage() {
             if (card) applyVisuals(card, match.status);
         }
 
-        // 2. PAINEL
+        // 3. Main Anime Panel Logic
         if (!foundMainAnime) {
             const tag = element.tagName;
-            const isH1 = (tag === 'H1');
+            const isHead = ['H1','H2'].includes(tag);
             const urlPath = window.location.pathname.toLowerCase().replace(/[^a-z0-9]/g, "");
             const titleClean = animeTitle.replace(/\s/g, "");
             const isInUrl = urlPath.includes(titleClean);
             
-            if ((isH1 || isInUrl) && !element.closest('aside, footer, .sidebar, .widget, header, nav')) {
+            if ((isHead || isInUrl) && !element.closest('aside, footer, .sidebar, .widget, header, nav')) {
+                
+                // Extra check: If we found a match in LOCAL list, verify similarity again
+                // to prevent "Golden Kamuy" local match overriding "Golden Kamuy Saishuushou" page title.
+                if (match) {
+                    // Se o match local for "Golden Kamuy" mas o título da página for 
+                    // "Golden Kamuy Saishuushou", isFuzzyMatch agora deve retornar FALSE
+                    // e impedir este bloco de executar como match local.
+                    // (Já tratado pela função isFuzzyMatch atualizada acima)
+                }
+
                 foundMainAnime = true; 
-                
-                // LOG DE DEBUG DO MATCH
-                if(isInUrl) logDebug("URL Match", `Anime: "${animeTitle}" encontrado no URL.`);
-                
-                if (!document.getElementById('malControlPanel')?.classList.contains('visible')) {
-                    if (match) {
-                        logDebug("Lista Local", `Encontrado na tua lista: "${text}"`);
-                        showPanel(text, match);
-                    } else {
-                        searchAndShowPanel(text);
-                    }
+                if (!panelVisible) {
+                    if (match) showPanel(text, match);
+                    else searchAndShowPanel(text);
                 }
             }
         }
@@ -291,22 +341,25 @@ function processPage() {
 // --- BOOT ---
 function startObserver() {
     if (!document.body) { setTimeout(startObserver, 100); return; }
+    
     processPage();
+
     if (observer) observer.disconnect();
     observer = new MutationObserver((mutations) => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => { processPage(); }, 500);
+        debounceTimer = setTimeout(() => { processPage(); }, 300);
     });
+    
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
 (async () => {
     if (window.location.hostname.includes("myanimelist.net")) return;
-    if (localStorage.getItem('mal_v22_domainfix')) localStorage.removeItem('mal_v22_domainfix');
+    if (localStorage.getItem('mal_v25_clean')) localStorage.removeItem('mal_v25_clean'); 
 
     try {
         await getUserList();
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startObserver);
         else startObserver();
-    } catch (e) { console.error("[MAL] Init failed:", e); }
+    } catch (e) { console.error("[MAL Highlighter] Init failed", e); }
 })();
