@@ -1,0 +1,32 @@
+/*
+ * Estilo aplicado aos cards encontrados.
+ * USA "INSET BOX-SHADOW" em vez de border para não ocupar espaço extra.
+ */
+.mal-watching-border {
+    /* O truque está aqui: 'inset 0 0 0 4px' cria uma linha sólida de 4px
+       DENTRO do elemento, sem aumentar o seu tamanho total.
+    */
+    box-shadow: inset 0 0 0 4px #2db039, 0 0 15px rgba(45, 176, 57, 0.5) !important;
+    
+    /* Garante que a etiqueta se posiciona em relação a este cartão */
+    position: relative !important; 
+    border-radius: 4px;
+}
+
+/* * Estilo da etiqueta WATCHING.
+ * Definido aqui para evitar duplicados gerados por JS.
+ */
+.mal-label {
+    position: absolute;
+    top: 6px; /* Ajuste fino para ficar dentro da borda */
+    left: 6px; /* Ajuste fino para ficar dentro da borda */
+    background: #2db039;
+    color: white;
+    font-size: 10px;
+    padding: 2px 5px;
+    z-index: 999;
+    border-radius: 3px;
+    font-weight: bold;
+    pointer-events: none; /* O rato ignora a etiqueta, para poderes clicar no anime */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}

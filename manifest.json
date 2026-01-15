@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "TopAnimes - Direct MAL Watching",
+  "version": "2.0",
+  "description": "Borda verde nos animes Watching (Directo do MAL, sem API Jikan)",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://topanimes.net/*",
+    "https://myanimelist.net/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://topanimes.net/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}
