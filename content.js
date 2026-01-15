@@ -1,20 +1,22 @@
 /**
- * Content Script - MAL Highlighter v28.3 (Sequel Precision)
- * Correção: Lógica de comparação (isFuzzyMatch) alterada para Jaccard Index.
- * Impede que "Golden Kamuy" (Prequela) seja detetado como match para 
- * "Golden Kamuy: Saishuushou" (Sequela), forçando a procura correta na API.
+ * Content Script - MAL Highlighter v29.3 (Normalization Order Fix)
+ * Correção Crítica:
+ * A remoção de acentos foi movida para o INÍCIO da função 'normalize'.
+ * Antes: "Episódio 18" -> Regex falhava (procurava 'episodio') -> API recebia lixo.
+ * Agora: "Episódio 18" -> Vira "episodio 18" -> Regex apaga -> API recebe limpo.
  */
 
 const CACHE_KEY = 'mal_v26_enhanced'; 
 const CACHE_DURATION = 1000 * 60 * 15; 
 
-// Blocklist de UI (Mantida da v28.2)
+// Blocklist de UI
 const UI_BLOCKLIST = [
     "selecione um", "player de video", "comentarios", "relacionados", 
     "episodios", "lancamentos", "parceiros", "dmca", "termos", 
     "login", "registrar", "assistir", "online", "download", 
     "animes online", "todos os direitos", "copyright", "proximo episodio",
-    "episodio anterior", "lista de animes", "generos", "contato"
+    "episodio anterior", "lista de animes", "generos", "contato",
+    "filmes", "animes", "donghuas", "calendario"
 ];
 
 let globalAnimeMap = new Map();
@@ -29,20 +31,52 @@ const STATUS_MAP = {
     6: { class: 'mal-plan', label: 'PLAN TO WATCH' }
 };
 
+/**
+ * Advanced Normalization Strategy v4 (Correct Order)
+ */
 const normalize = (str) => {
     if (!str || str.length < 3) return "";
     
-    let clean = String(str).toLowerCase()
-        .replace(/[\[\]\(\)\-\_\.]/g, " "); 
+    let clean = String(str).toLowerCase();
 
+    // 1. REMOVER ACENTOS (MOVIDO PARA O TOPO)
+    // Isto garante que "Episódio" vira "episodio" ANTES de tentarmos remover a palavra.
     clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|episodio|episode|ep|filme|[0-9]+ª|online|ver|assistir|season|temp|parte|part)\b/g;
+    // 2. Remover Episódios (Agora funciona mesmo com "Episódio")
+    clean = clean.replace(/\b(episodio|episode|ep|e)\s*[0-9]+\b/g, " ");
+
+    // 3. Normalizar Ordinais
+    clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1");
+
+    // 4. Remover Hífens SEPARADORES
+    clean = clean.replace(/\s+-\s+/g, " ");
+
+    // 5. Limpar outros separadores
+    clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
+
+    // 6. STOP WORDS
+    const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|[0-9]+ª|online|ver|assistir|season|temp|parte|part|net|com|br|org|hd|fhd|4k|q1n|hen|arc|chapter|capitulo)\b/g;
     clean = clean.replace(ignoreRegex, " ");
 
-    return clean.replace(/[^a-z0-9\s]/g, "")
+    // 7. Limpeza Final
+    return clean.replace(/[^a-z0-9\s\-]/g, "")
                 .replace(/\s+/g, " ").trim();
 };
+
+function getSlugFromUrl() {
+    const path = window.location.pathname;
+    const segments = path.split('/').filter(p => p.length > 0);
+    
+    if (segments.length === 0) return null;
+    
+    const lastSegment = segments[segments.length - 1].toLowerCase();
+    
+    if (UI_BLOCKLIST.includes(lastSegment) || /page\d+/.test(lastSegment)) return null;
+
+    // Converte hífens em espaços para o URL Slug
+    return lastSegment.replace(/-/g, ' ');
+}
 
 function getUsername() {
     return new Promise((resolve) => {
@@ -191,31 +225,21 @@ function getStatusColor(status) {
     }
 }
 
-/**
- * REFACTORED: Strict Token Comparison (Jaccard Index)
- * Corrige o problema onde "Golden Kamuy" dava match com "Golden Kamuy: Saishuushou".
- */
 function isFuzzyMatch(siteTitle, malTitle) {
-    // 1. Exact Match (Fastest)
     if (siteTitle === malTitle) return true;
 
-    // 2. Substring Check (Strict)
-    // Só aceita diferenças minúsculas (ex: 4 letras), para prevenir
-    // que "Anime X" capture "Anime X: Sequel Y".
     if (malTitle.includes(siteTitle) || siteTitle.includes(malTitle)) {
         if (Math.abs(malTitle.length - siteTitle.length) <= 4) return true;
     }
 
-    const tokensSite = siteTitle.split(' ').filter(t => t.length > 1);
-    const tokensMal = malTitle.split(' ').filter(t => t.length > 1);
+    const cleanToken = t => t.replace(/-/g, '');
+    
+    const tokensSite = siteTitle.split(' ').filter(t => t.length > 1).map(cleanToken);
+    const tokensMal = malTitle.split(' ').filter(t => t.length > 1).map(cleanToken);
     
     if (tokensSite.length === 0 || tokensMal.length === 0) return false;
 
-    // 3. Jaccard Index Calculation
-    // Intersection (palavras comuns) / Union (total palavras únicas)
-    // Ex: "A B" vs "A B C" -> Intersect: 2, Union: 3 -> 0.66 (Reprovado, precisa de 0.75)
-    
-    const allTokens = new Set([...tokensSite, ...tokensMal]); // Union
+    const allTokens = new Set([...tokensSite, ...tokensMal]);
     let matches = 0;
     
     tokensSite.forEach(token => {
@@ -224,8 +248,16 @@ function isFuzzyMatch(siteTitle, malTitle) {
 
     const ratio = matches / allTokens.size;
 
-    // Se tiver poucas palavras, exige perfeição. Se tiver muitas, aceita 75%.
-    return ratio >= (allTokens.size < 3 ? 1.0 : 0.75);
+    if (tokensMal.length < 3) {
+        return ratio >= 1.0;
+    }
+
+    const allMalTokensPresent = tokensMal.every(t => tokensSite.includes(t));
+    if (allMalTokensPresent && tokensMal.length >= 3) {
+         return ratio >= 0.6; 
+    }
+
+    return ratio >= 0.75;
 }
 
 function searchAndShowPanel(rawTitle) {
@@ -246,9 +278,9 @@ function searchAndShowPanel(rawTitle) {
             const anime = response.anime;
             const animeTitleNorm = normalize(anime.title);
             
-            // Validation using the new stricter logic
             if (!isFuzzyMatch(cleanQuery, animeTitleNorm)) {
-                console.warn(`[MAL Highlighter] Mismatch ignored: "${cleanQuery}" vs "${animeTitleNorm}"`);
+                // Mensagem de log mais clara para saberes que é normal
+                console.log(`[MAL Highlighter] SafeGuard Active: API returned "${animeTitleNorm}" for query "${cleanQuery}". Rejected to prevent false positive.`);
                 return; 
             }
 
@@ -280,14 +312,11 @@ function processPage() {
         if (text.length < 3) return;
         
         const lowerText = text.toLowerCase();
-
-        // 1. BLOCKLIST CHECK
         if (UI_BLOCKLIST.some(term => lowerText.includes(term))) return;
 
         const animeTitle = normalize(text);
         if (!animeTitle || animeTitle.length < 3) return;
 
-        // 2. Local Cache Check
         let match = null;
         if (globalAnimeMap.has(animeTitle)) {
             match = globalAnimeMap.get(animeTitle);
@@ -305,33 +334,51 @@ function processPage() {
             if (card) applyVisuals(card, match.status);
         }
 
-        // 3. Main Anime Panel Logic
         if (!foundMainAnime) {
             const tag = element.tagName;
             const isHead = ['H1','H2'].includes(tag);
             const urlPath = window.location.pathname.toLowerCase().replace(/[^a-z0-9]/g, "");
             const titleClean = animeTitle.replace(/\s/g, "");
-            const isInUrl = urlPath.includes(titleClean);
+            const isInUrl = urlPath.includes(titleClean.replace(/-/g, ""));
             
             if ((isHead || isInUrl) && !element.closest('aside, footer, .sidebar, .widget, header, nav')) {
-                
-                // Extra check: If we found a match in LOCAL list, verify similarity again
-                // to prevent "Golden Kamuy" local match overriding "Golden Kamuy Saishuushou" page title.
-                if (match) {
-                    // Se o match local for "Golden Kamuy" mas o título da página for 
-                    // "Golden Kamuy Saishuushou", isFuzzyMatch agora deve retornar FALSE
-                    // e impedir este bloco de executar como match local.
-                    // (Já tratado pela função isFuzzyMatch atualizada acima)
-                }
-
-                foundMainAnime = true; 
-                if (!panelVisible) {
-                    if (match) showPanel(text, match);
-                    else searchAndShowPanel(text);
+                if (match && !panelVisible) {
+                    showPanel(text, match);
+                    foundMainAnime = true;
+                } else if (!match && !panelVisible) {
+                    searchAndShowPanel(text);
+                    foundMainAnime = true;
                 }
             }
         }
     });
+
+    if (!foundMainAnime) {
+        const urlTitle = getSlugFromUrl();
+        if (urlTitle && urlTitle.length > 3) {
+            const normUrlTitle = normalize(urlTitle);
+            if (!UI_BLOCKLIST.some(term => normUrlTitle.includes(term))) {
+                 let match = null;
+                 if (globalAnimeMap.has(normUrlTitle)) {
+                     match = globalAnimeMap.get(normUrlTitle);
+                 } else {
+                     for (let [malTitle, data] of globalAnimeMap) {
+                         if (isFuzzyMatch(normUrlTitle, malTitle)) {
+                             match = data;
+                             break;
+                         }
+                     }
+                 }
+                 if (match) {
+                     if (!panelVisible) showPanel(urlTitle, match);
+                     foundMainAnime = true;
+                 } else if (!panelVisible) {
+                     searchAndShowPanel(urlTitle);
+                     foundMainAnime = true;
+                 }
+            }
+        }
+    }
 
     if (!foundMainAnime) {
         setTimeout(() => { if (!foundMainAnime) hidePanel(); }, 500);
