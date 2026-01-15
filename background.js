@@ -1,14 +1,13 @@
 /**
  * Background Service Worker
- * Responsável por fazer o fetch cross-origin ao MyAnimeList
+ * Versão 3.0: Busca a lista completa de animes (Todos os estados)
  */
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_MAL_LIST") {
         const username = request.username;
-        // URL interna que o MAL usa para carregar a lista (muito mais rápido e fiável que APIs externas)
-        // status=1 significa "Watching"
-        const malUrl = `https://myanimelist.net/animelist/${username}/load.json?status=1&offset=0`;
+        // status=7 pede "Todos" os animes da lista
+        const malUrl = `https://myanimelist.net/animelist/${username}/load.json?status=7&offset=0`;
 
         fetch(malUrl)
             .then(response => {
@@ -23,6 +22,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 sendResponse({ success: false, error: error.message });
             });
 
-        return true; // Mantém o canal de mensagem aberto para a resposta assíncrona
+        return true; 
     }
 });
