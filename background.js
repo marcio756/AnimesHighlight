@@ -1,41 +1,79 @@
 /**
- * Background Service Worker - v30.0 (Multi-Result Search)
- * Melhoria: Agora pede 5 resultados à API em vez de 1.
- * Isso permite encontrar Especiais/Filmes que a API esconde atrás da Série Principal.
+ * Background Service Worker - v31.0 (Pagination Fix)
+ * Correção Crítica:
+ * Implementada paginação (loop) no pedido load.json.
+ * O MAL só devolve 300 animes por pedido. Agora a extensão continua a pedir
+ * (offset += 300) até ter a lista completa (Dropped, On Hold, etc.).
  */
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // 1. Buscar Lista do Utilizador
-    if (request.action === "FETCH_MAL_LIST") {
-        const username = request.username;
-        const malUrl = `https://myanimelist.net/animelist/${username}/load.json?status=7&offset=0&_t=${Date.now()}`;
+// Função auxiliar para buscar a lista completa (com paginação)
+async function fetchUserListRecursively(username) {
+    let allItems = [];
+    let offset = 0;
+    let hasMore = true;
 
-        fetch(malUrl)
-            .then(res => {
-                if (!res.ok) throw new Error("Private or Invalid Profile");
-                return res.json();
-            })
+    // Proteção contra loops infinitos (limite de 30.000 animes)
+    while (hasMore && offset < 30000) {
+        // Adicionamos status=7 (All) e o offset dinâmico
+        const malUrl = `https://myanimelist.net/animelist/${username}/load.json?status=7&offset=${offset}&_t=${Date.now()}`;
+        
+        try {
+            const res = await fetch(malUrl);
+            
+            // Se der erro de acesso (400/403)
+            if (!res.ok) throw new Error("Private or Invalid Profile");
+            
+            const data = await res.json();
+            
+            // Validação de formato
+            if (!Array.isArray(data)) throw new Error("Invalid Data Format");
+
+            // Junta os novos itens à lista principal
+            allItems = allItems.concat(data);
+
+            console.log(`[Background] Fetched ${data.length} items (Offset: ${offset})`);
+
+            // Se vieram menos de 300 itens, significa que chegámos ao fim da lista.
+            if (data.length < 300) {
+                hasMore = false;
+            } else {
+                // Senão, preparamos o próximo bloco
+                offset += 300;
+            }
+        } catch (error) {
+            console.error(`[Background] Error fetching offset ${offset}:`, error);
+            // Se falhar a meio (ex: timeout), devolvemos o que já temos para não partir tudo
+            if (allItems.length > 0) return allItems;
+            throw error;
+        }
+    }
+    
+    console.log(`[Background] Full list fetch complete. Total items: ${allItems.length}`);
+    return allItems;
+}
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // 1. Buscar Lista do Utilizador (COM PAGINAÇÃO)
+    if (request.action === "FETCH_MAL_LIST") {
+        fetchUserListRecursively(request.username)
             .then(data => {
-                if (!Array.isArray(data)) throw new Error("Invalid Data Format");
                 sendResponse({ success: true, data: data });
             })
             .catch(err => {
-                console.warn("[Background] Fetch failed:", err.message);
                 sendResponse({ success: false, error: err.message });
             });
 
-        return true; 
+        return true; // Mantém o canal aberto para a resposta assíncrona
     }
 
-    // 2. Pesquisar Anime (AGORA COM LIMIT=5)
+    // 2. Pesquisar Anime (Multi-Result)
+    // Mantém a lógica v30.0 de pedir 5 resultados para encontrar filmes/especiais
     if (request.action === "SEARCH_ANIME") {
         const query = encodeURIComponent(request.title);
-        // Alterado de limit=1 para limit=5
         fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=5`)
             .then(res => res.json())
             .then(data => {
                 if (data.data && data.data.length > 0) {
-                    // Devolvemos o array completo 'results' em vez de 'anime' único
                     sendResponse({ success: true, results: data.data });
                 } else {
                     sendResponse({ success: false, error: "Anime not found" });

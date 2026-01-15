@@ -1,12 +1,13 @@
 /**
- * Content Script - MAL Highlighter v29.4 (Specifics Restore)
- * Correção Final:
- * 1. Removidos "hen", "arc", "chapter" da Blacklist. Estas palavras são cruciais
- * para distinguir arcos específicos (ex: Winter-hen) da série principal.
- * 2. Mantém a correção de acentos da v29.3.
+ * Content Script - MAL Highlighter v31.0 (Cache Reset)
+ * Correção:
+ * 1. CACHE_KEY atualizada para 'mal_v31_full_list' para forçar o download 
+ * da nova lista completa (com Dropped/OnHold) vinda do background atualizado.
+ * 2. Mantém todas as lógicas de limpeza (Light Novel, Hífens, Acentos) da v30.1.
  */
 
-const CACHE_KEY = 'mal_v26_enhanced'; 
+// --- ATENÇÃO: MUDANÇA DE CHAVE DE CACHE ---
+const CACHE_KEY = 'mal_v31_full_list'; 
 const CACHE_DURATION = 1000 * 60 * 15; 
 
 // Blocklist de UI
@@ -32,14 +33,14 @@ const STATUS_MAP = {
 };
 
 /**
- * Advanced Normalization Strategy v5 (Precision Tuning)
+ * Advanced Normalization Strategy v5
  */
 const normalize = (str) => {
     if (!str || str.length < 3) return "";
     
     let clean = String(str).toLowerCase();
 
-    // 1. REMOVER ACENTOS (Prioridade Máxima)
+    // 1. REMOVER ACENTOS
     clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
     // 2. Remover Episódios
@@ -48,25 +49,19 @@ const normalize = (str) => {
     // 3. Normalizar Ordinais
     clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1");
 
-    // 4. Remover Hífens SEPARADORES (Espaço - Espaço)
+    // 4. Remover Hífens SEPARADORES
     clean = clean.replace(/\s+-\s+/g, " ");
 
     // 5. Limpar outros separadores
     clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
 
-    // 6. STOP WORDS (REMOVIDO: hen, arc, chapter - são necessários!)
-    // Mantemos apenas lixo genérico de sites.
+    // 6. STOP WORDS
     const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|[0-9]+ª|online|ver|assistir|season|temp|parte|part|net|com|br|org|hd|fhd|4k|q1n|capitulo)\b/g;
     clean = clean.replace(ignoreRegex, " ");
 
     // 7. Limpeza Final
-    // Garante que não ficam hífens pendurados no fim (ex: "Winter-")
     clean = clean.replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
-    
-    // Remove hífen se for o último caracter
-    if (clean.endsWith('-')) {
-        clean = clean.slice(0, -1);
-    }
+    if (clean.endsWith('-')) clean = clean.slice(0, -1);
     
     return clean.trim();
 };
@@ -81,7 +76,6 @@ function getSlugFromUrl() {
     
     if (UI_BLOCKLIST.includes(lastSegment) || /page\d+/.test(lastSegment)) return null;
 
-    // URL Slug: Substituir hífens por espaço
     return lastSegment.replace(/-/g, ' ');
 }
 
@@ -232,6 +226,10 @@ function getStatusColor(status) {
     }
 }
 
+/**
+ * REFACTORED: Enhanced Matching Logic (v30.1 + v31.0)
+ * Adicionado suporte para "Subset Matching" em títulos longos.
+ */
 function isFuzzyMatch(siteTitle, malTitle) {
     if (siteTitle === malTitle) return true;
 
@@ -246,13 +244,18 @@ function isFuzzyMatch(siteTitle, malTitle) {
     
     if (tokensSite.length === 0 || tokensMal.length === 0) return false;
 
-    const allTokens = new Set([...tokensSite, ...tokensMal]);
+    // --- NEW LOGIC: SUBSET CHECK (Long Titles) ---
     let matches = 0;
-    
     tokensSite.forEach(token => {
         if (tokensMal.includes(token)) matches++;
     });
 
+    if (tokensSite.length >= 5 && matches === tokensSite.length) {
+        return true; 
+    }
+    // ----------------------------------------------
+
+    const allTokens = new Set([...tokensSite, ...tokensMal]);
     const ratio = matches / allTokens.size;
 
     if (tokensMal.length < 3) {
@@ -283,29 +286,25 @@ function searchAndShowPanel(rawTitle) {
         
         if (response && response.success && response.results) {
             
-            // LÓGICA DE SELEÇÃO DO MELHOR CANDIDATO
+            // Smart Selector: Percorre os 5 resultados
             let bestMatch = null;
 
-            // Percorre os 5 resultados vindos da API
             for (const anime of response.results) {
                 const animeTitleNorm = normalize(anime.title);
                 
-                // O primeiro que passar na validação rigorosa ganha
                 if (isFuzzyMatch(cleanQuery, animeTitleNorm)) {
                     bestMatch = anime;
-                    break; // Encontrámos! Parar de procurar.
+                    break; 
                 } else {
                     console.log(`[MAL Highlighter] Rejected candidate: "${animeTitleNorm}" for query "${cleanQuery}"`);
                 }
             }
 
-            // Se nenhum dos 5 servir (SafeGuard total)
             if (!bestMatch) {
                 console.warn(`[MAL Highlighter] SafeGuard: All 5 API results rejected for query "${cleanQuery}".`);
                 return;
             }
 
-            // Processa o vencedor
             let finalStatus = null;
             for (let [key, val] of globalAnimeMap.entries()) {
                 if (val.id === bestMatch.mal_id) {
@@ -424,6 +423,7 @@ function startObserver() {
 
 (async () => {
     if (window.location.hostname.includes("myanimelist.net")) return;
+    // Removemos chaves antigas se existirem
     if (localStorage.getItem('mal_v25_clean')) localStorage.removeItem('mal_v25_clean'); 
 
     try {
