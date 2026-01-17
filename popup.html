@@ -2,49 +2,102 @@
 <html>
 <head>
     <style>
-        body { width: 280px; padding: 15px; font-family: 'Segoe UI', sans-serif; text-align: center; color: #333; }
-        h3 { margin-top: 0; color: #2e51a2; margin-bottom: 15px; }
+        body { width: 300px; padding: 0; margin: 0; font-family: 'Segoe UI', sans-serif; color: #333; background: #fff; }
         
+        /* Header & Tabs */
+        .header { background: #2e51a2; padding: 15px 15px 0 15px; color: white; }
+        h3 { margin: 0 0 10px 0; font-size: 16px; }
+        
+        .tabs { display: flex; gap: 5px; }
+        .tab-btn {
+            background: rgba(255,255,255,0.3);
+            border: none;
+            color: rgba(255,255,255,0.8);
+            padding: 8px 15px;
+            cursor: pointer;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            flex: 1;
+        }
+        .tab-btn.active { background: #fff; color: #2e51a2; }
+        
+        /* Content Areas */
+        .content { padding: 15px; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* Form Elements */
         .input-group { text-align: left; margin-bottom: 15px; }
-        label { font-size: 12px; color: #666; font-weight: bold; }
-        input { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+        label { font-size: 11px; color: #666; font-weight: bold; display: block; margin-bottom: 4px; }
+        input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
         
-        button { 
+        button.action-btn { 
             width: 100%; padding: 10px; background: #2e51a2; 
             color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;
             transition: background 0.2s;
         }
-        button:hover { background: #223f82; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.action-btn:hover { background: #223f82; }
+        button.action-btn:disabled { background: #ccc; cursor: not-allowed; }
 
-        .profile-area { margin-top: 15px; display: none; padding: 10px; background: #f4f4f4; border-radius: 8px; }
-        .avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #2e51a2; margin-bottom: 5px; }
-        .welcome { font-size: 13px; color: #333; font-weight: 600; }
+        /* Profile & Status */
+        .profile-area { margin-top: 15px; display: none; padding: 10px; background: #f4f4f4; border-radius: 8px; text-align: center; }
+        .avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #2e51a2; }
+        .welcome { font-size: 13px; font-weight: 600; margin-top: 5px; }
         
-        .status { margin-top: 10px; font-size: 12px; min-height: 15px; }
+        .status { margin-top: 10px; font-size: 11px; min-height: 15px; text-align: center; }
         .error { color: #d32f2f; }
         .success { color: #2e7d32; }
         
-        .footer { margin-top: 15px; font-size: 10px; color: #999; }
+        /* Monitor Specific */
+        .monitor-info { font-size: 11px; color: #777; line-height: 1.4; margin-bottom: 10px; background: #f9f9f9; padding: 8px; border-radius: 4px; border-left: 3px solid #f1c83e; }
+
+        .footer { padding: 10px; font-size: 9px; color: #999; text-align: center; border-top: 1px solid #eee; }
     </style>
 </head>
 <body>
-    <h3>MAL Highlighter</h3>
-    
-    <div class="input-group">
-        <label>MyAnimeList Username:</label>
-        <input type="text" id="username" placeholder="e.g. marcio756">
+    <div class="header">
+        <h3>MAL Highlighter</h3>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-profile">Profile</button>
+            <button class="tab-btn" data-tab="tab-monitor">Monitor</button>
+        </div>
     </div>
 
-    <button id="saveBtn">Verify & Save</button>
-    <div id="status" class="status"></div>
+    <div class="content">
+        <div id="tab-profile" class="tab-pane active">
+            <div class="input-group">
+                <label>MyAnimeList Username:</label>
+                <input type="text" id="username" placeholder="e.g. marcio756">
+            </div>
+            <button id="saveBtn" class="action-btn">Verify & Save</button>
+            
+            <div id="profileArea" class="profile-area">
+                <img id="avatar" class="avatar" src="" alt="Profile">
+                <div class="welcome" id="welcomeText"></div>
+            </div>
+            <div id="statusProfile" class="status"></div>
+        </div>
 
-    <div id="profileArea" class="profile-area">
-        <img id="avatar" class="avatar" src="" alt="Profile">
-        <div class="welcome" id="welcomeText"></div>
+        <div id="tab-monitor" class="tab-pane">
+            <div class="monitor-info">
+                We will check this site every 60 minutes. If a new episode for an anime in your "Watching" list appears, we'll notify you.
+            </div>
+            <div class="input-group">
+                <label>Anime Site URL to Monitor:</label>
+                <input type="text" id="monitorUrl" placeholder="https://example.com/latest-episodes">
+            </div>
+            <div class="input-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="monitorEnabled" style="width: auto;">
+                <label for="monitorEnabled" style="margin: 0; cursor: pointer;">Enable Background Monitoring</label>
+            </div>
+            <button id="saveMonitorBtn" class="action-btn">Save Settings</button>
+            <div id="statusMonitor" class="status"></div>
+        </div>
     </div>
     
-    <div class="footer">Universal Version 1.0</div>
+    <div class="footer">Universal Version 1.1</div>
 
     <script src="popup.js"></script>
 </body>

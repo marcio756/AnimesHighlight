@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Universal MAL Highlighter",
-  "version": "1.0",
-  "description": "Automatically highlights anime cards on streaming sites based on your MyAnimeList watch status.",
-  "permissions": ["storage"],
+  "version": "1.1",
+  "description": "Automatically highlights anime cards and monitors new releases.",
+  "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [
     "<all_urls>"
   ],
