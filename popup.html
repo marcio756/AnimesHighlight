@@ -41,7 +41,7 @@
         button.action-btn:hover { background: #223f82; }
         button.action-btn:disabled { background: #ccc; cursor: not-allowed; }
 
-        /* Profile & Status */
+        /* Profile Styles */
         .profile-area { margin-top: 15px; display: none; padding: 10px; background: #f4f4f4; border-radius: 8px; text-align: center; }
         .avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #2e51a2; }
         .welcome { font-size: 13px; font-weight: 600; margin-top: 5px; }
@@ -50,8 +50,34 @@
         .error { color: #d32f2f; }
         .success { color: #2e7d32; }
         
-        /* Monitor Specific */
+        /* Monitor Styles */
         .monitor-info { font-size: 11px; color: #777; line-height: 1.4; margin-bottom: 10px; background: #f9f9f9; padding: 8px; border-radius: 4px; border-left: 3px solid #f1c83e; }
+
+        /* Notification History Styles */
+        .notif-list { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
+        
+        .notif-item { 
+            padding: 10px; 
+            border-bottom: 1px solid #eee; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 4px; 
+            cursor: pointer; /* Indica clicável */
+            transition: background 0.2s ease;
+        }
+        .notif-item:hover { background: #eef2ff; } /* Efeito visual ao passar o rato */
+        
+        .notif-item:last-child { border-bottom: none; }
+        .notif-header { display: flex; justify-content: space-between; align-items: center; }
+        .notif-title { font-weight: bold; font-size: 12px; color: #333; }
+        .notif-date { font-size: 10px; color: #999; }
+        .notif-ep { font-size: 11px; color: #2e51a2; font-weight: 600; }
+        
+        .empty-state { text-align: center; padding: 20px; color: #999; font-size: 12px; }
+        
+        .clear-btn-container { padding-top: 10px; border-top: 1px solid #eee; margin-top: 10px; }
+        .btn-danger { background: #d32f2f !important; }
+        .btn-danger:hover { background: #b71c1c !important; }
 
         .footer { padding: 10px; font-size: 9px; color: #999; text-align: center; border-top: 1px solid #eee; }
     </style>
@@ -62,6 +88,7 @@
         <div class="tabs">
             <button class="tab-btn active" data-tab="tab-profile">Profile</button>
             <button class="tab-btn" data-tab="tab-monitor">Monitor</button>
+            <button class="tab-btn" data-tab="tab-notifications">History</button>
         </div>
     </div>
 
@@ -82,11 +109,11 @@
 
         <div id="tab-monitor" class="tab-pane">
             <div class="monitor-info">
-                We will check this site every 60 minutes. If a new episode for an anime in your "Watching" list appears, we'll notify you.
+                Checks the site every 60 minutes for new episodes of animes you are currently "Watching".
             </div>
             <div class="input-group">
                 <label>Anime Site URL to Monitor:</label>
-                <input type="text" id="monitorUrl" placeholder="https://example.com/latest-episodes">
+                <input type="text" id="monitorUrl" placeholder="https://example.com/latest">
             </div>
             <div class="input-group" style="display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="monitorEnabled" style="width: auto;">
@@ -95,10 +122,20 @@
             <button id="saveMonitorBtn" class="action-btn">Save Settings</button>
             <div id="statusMonitor" class="status"></div>
         </div>
+
+        <div id="tab-notifications" class="tab-pane">
+            <div id="notifContainer">
+                <ul id="notificationList" class="notif-list"></ul>
+                <div id="emptyState" class="empty-state" style="display:none;">No new episodes detected yet.</div>
+            </div>
+            
+            <div class="clear-btn-container">
+                <button id="clearNotifsBtn" class="action-btn btn-danger">Clear History</button>
+            </div>
+        </div>
     </div>
     
-    <div class="footer">Universal Version 1.1</div>
-
+    <div class="footer">Universal Version 1.3</div>
     <script src="popup.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
     
-    // Profile Logic
+    // Profile
     const inputUser = document.getElementById('username');
     const saveProfileBtn = document.getElementById('saveBtn');
     const statusProfile = document.getElementById('statusProfile');
@@ -11,35 +11,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const avatar = document.getElementById('avatar');
     const welcomeText = document.getElementById('welcomeText');
 
-    // Monitor Logic
+    // Monitor
     const inputUrl = document.getElementById('monitorUrl');
     const checkEnabled = document.getElementById('monitorEnabled');
     const saveMonitorBtn = document.getElementById('saveMonitorBtn');
     const statusMonitor = document.getElementById('statusMonitor');
 
-    // --- TABS NAVIGATION ---
+    // Notifications
+    const notifListEl = document.getElementById('notificationList');
+    const emptyStateEl = document.getElementById('emptyState');
+    const clearNotifsBtn = document.getElementById('clearNotifsBtn');
+
+    // --- TABS ---
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
             panes.forEach(p => p.classList.remove('active'));
             tab.classList.add('active');
-            document.getElementById(tab.dataset.tab).classList.add('active');
+            
+            const targetId = tab.dataset.tab;
+            document.getElementById(targetId).classList.add('active');
+
+            if (targetId === 'tab-notifications') {
+                loadNotifications();
+            }
         });
     });
 
-    // --- INITIALIZATION ---
+    // --- INIT ---
     chrome.storage.local.get(['malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled'], (res) => {
-        // Init Profile
         if (res.malUsername) {
             inputUser.value = res.malUsername;
             if (res.malAvatar) showProfile(res.malUsername, res.malAvatar);
         }
-        // Init Monitor
         if (res.monitorUrl) inputUrl.value = res.monitorUrl;
         if (res.monitorEnabled !== undefined) checkEnabled.checked = res.monitorEnabled;
     });
 
-    // --- PROFILE ACTIONS ---
+    // --- PROFILE LOGIC ---
     saveProfileBtn.addEventListener('click', async () => {
         const username = inputUser.value.trim();
         if (!username) return;
@@ -60,8 +69,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateStatus(statusProfile, "Saved successfully!", "success");
                         showProfile(username, imageUrl);
                         saveProfileBtn.disabled = false;
-                        
-                        // Clear caches
                         localStorage.removeItem('mal_v31_full_list'); 
                     });
                 } else {
@@ -75,22 +82,81 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- MONITOR ACTIONS ---
+    // --- MONITOR LOGIC ---
     saveMonitorBtn.addEventListener('click', () => {
         const url = inputUrl.value.trim();
         const enabled = checkEnabled.checked;
         
         if (enabled && !isValidUrl(url)) {
-            updateStatus(statusMonitor, "Please enter a valid URL (http/https).", "error");
+            updateStatus(statusMonitor, "Please enter a valid URL.", "error");
             return;
         }
 
         chrome.storage.local.set({ monitorUrl: url, monitorEnabled: enabled }, () => {
             updateStatus(statusMonitor, "Settings saved!", "success");
-            
-            // Notify Background to restart/stop alarms
             chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
         });
+    });
+
+    // --- NOTIFICATIONS LOGIC ---
+    function loadNotifications() {
+        chrome.storage.local.get('notificationLog', (result) => {
+            const logs = result.notificationLog || [];
+            
+            notifListEl.innerHTML = '';
+            
+            if (logs.length === 0) {
+                emptyStateEl.style.display = 'block';
+                clearNotifsBtn.disabled = true;
+                return;
+            }
+
+            emptyStateEl.style.display = 'none';
+            clearNotifsBtn.disabled = false;
+
+            logs.forEach(log => {
+                const dateObj = new Date(log.date);
+                const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                let title = log.text;
+                let ep = "";
+                
+                if (log.text.includes(' - ')) {
+                    const parts = log.text.split(' - ');
+                    title = parts[0];
+                    ep = parts[1];
+                }
+
+                const li = document.createElement('li');
+                li.className = 'notif-item';
+                
+                // CLICK ACTION: Abre o site monitorizado
+                li.addEventListener('click', () => {
+                    chrome.storage.local.get('monitorUrl', (res) => {
+                        if (res.monitorUrl) {
+                            chrome.tabs.create({ url: res.monitorUrl });
+                        } else {
+                            alert("Monitor URL not found in settings.");
+                        }
+                    });
+                });
+
+                li.innerHTML = `
+                    <div class="notif-header">
+                        <span class="notif-title">${escapeHtml(title)}</span>
+                        <span class="notif-date">${dateStr}</span>
+                    </div>
+                    ${ep ? `<div class="notif-ep">${escapeHtml(ep)}</div>` : ''}
+                `;
+                notifListEl.appendChild(li);
+            });
+        });
+    }
+
+    clearNotifsBtn.addEventListener('click', () => {
+        if(confirm("Clear all history?")) {
+            chrome.storage.local.set({ notificationLog: [] }, () => loadNotifications());
+        }
     });
 
     // --- HELPERS ---
@@ -106,11 +172,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function isValidUrl(string) {
-        try {
-            new URL(string);
-            return true;
-        } catch (_) {
-            return false;
-        }
+        try { new URL(string); return true; } catch (_) { return false; }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 });
