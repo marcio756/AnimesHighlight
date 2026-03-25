@@ -1,13 +1,43 @@
 /**
  * Data Storage and API Communication Layer
- * @description Isolates caching logic and message passing for state retrieval.
+ * @description Isolates caching logic, self-learning dictionaries, and message passing.
  */
 
-class DataManager {
+class SynonymDictionary {
     /**
-     * Retrieves the stored MAL username.
-     * @returns {Promise<string>} The username.
+     * Retrieves the self-learned synonyms cache from local storage.
+     * @returns {Object} Key-Value pairs mapping aliases to official titles.
      */
+    static getCache() {
+        try {
+            return JSON.parse(localStorage.getItem('mal_synonyms_cache')) || {};
+        } catch { return {}; }
+    }
+
+    /**
+     * Persists a new discovered alias/synonym to storage.
+     * @param {string} alias - The name found on the website.
+     * @param {string} officialTitle - The normalized official MAL title.
+     */
+    static save(alias, officialTitle) {
+        if (!alias || !officialTitle) return;
+        const cache = this.getCache();
+        cache[alias] = officialTitle;
+        localStorage.setItem('mal_synonyms_cache', JSON.stringify(cache));
+    }
+
+    /**
+     * Translates a string using the self-learned cache if a match exists.
+     * @param {string} title - The title to translate.
+     * @returns {string} The official title if cached, otherwise the original string.
+     */
+    static resolve(title) {
+        const cache = this.getCache();
+        return cache[title] || title;
+    }
+}
+
+class DataManager {
     static async getUsername() {
         return new Promise((resolve) => {
             chrome.storage.local.get(['malUsername'], (result) => {
@@ -16,11 +46,6 @@ class DataManager {
         });
     }
 
-    /**
-     * Fetches and caches the user's combined list (Anime & Manga).
-     * Groups identical titles into an array to prevent key collision overrides.
-     * @returns {Promise<Map<string, Array<Object>>>} A Map of normalized titles to media arrays.
-     */
     static async getUserList() {
         const USERNAME = await this.getUsername();
         const cached = localStorage.getItem(CONFIG.CACHE_KEY);
@@ -43,9 +68,7 @@ class DataManager {
                         
                         const normTitle = TextNormalizer.normalize(item.title);
                         
-                        if (!newMap.has(normTitle)) {
-                            newMap.set(normTitle, []);
-                        }
+                        if (!newMap.has(normTitle)) newMap.set(normTitle, []);
 
                         newMap.get(normTitle).push({
                             status: item.status,

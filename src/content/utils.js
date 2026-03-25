@@ -1,12 +1,11 @@
 /**
  * Utility Service Layer
  * @description Centralizes pure logic, heuristics, and configuration constants.
- * Separated to enforce SRP and allow independent testing of text and matching algorithms.
  */
 
 const CONFIG = {
     CACHE_KEY: 'mal_v35_full_list', 
-    CACHE_DURATION: 1000 * 60 * 15, // 15 Minutes
+    CACHE_DURATION: 1000 * 60 * 15, 
     DEBOUNCE_DELAY: 500,
     SITE_KEYWORDS: [
         'anime', 'manga', 'donghua', 'episodio', 'episode', 'season', 
@@ -33,11 +32,6 @@ const STATUS_MAP = {
 };
 
 class PerformanceGuard {
-    /**
-     * Validates if the current web page context is related to anime or manga.
-     * Prevents the script from wasting CPU cycles on irrelevant websites.
-     * @returns {boolean} True if the page context matches the keywords.
-     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -49,39 +43,75 @@ class PerformanceGuard {
             title.includes(kw) || metaDesc.includes(kw) || url.includes(kw)
         );
 
-        if (!hasKeyword) {
-            console.log("[MAL Highlighter] Script idle: Not a recognized media page.");
-        }
+        if (!hasKeyword) console.log("[MAL Highlighter] Script idle: Not a recognized media page.");
         return hasKeyword;
     }
 }
 
 class ContextAnalyzer {
     /**
-     * Infers the type of media (anime or manga) based on the URL and page title keywords.
-     * Crucial for deciding which MyAnimeList profile to open when names collide.
-     * @returns {string} The inferred media type: 'anime' or 'manga'.
+     * Infers the type of media using a strict hierarchical ruleset.
+     * Rules applied in order of priority: URL -> Homepage Predominance -> Page Elements -> Fallback.
      */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
-        const title = document.title.toLowerCase();
-        const fullContext = url + title;
-
-        const mangaKeywords = ['manga', 'manhwa', 'comic', 'ler', 'read', 'capitulo', 'chapter', 'scan'];
         
-        if (mangaKeywords.some(kw => fullContext.includes(kw))) {
-            return 'manga';
+        // --- 1. PRIORIDADE MÁXIMA: Palavras no URL ---
+        const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon'];
+        const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'season', 'ova'];
+        
+        const urlTokens = url.replace(/[^a-z0-9]/g, ' ').split(' ');
+        
+        for (let kw of urlMangaKw) {
+            if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'manga';
         }
+        for (let kw of urlAnimeKw) {
+            if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'anime';
+        }
+
+        // Dados base para os passos 2 e 3
+        const path = window.location.pathname;
+        const isHomePage = path === '/' || path.length < 3;
+        const bodyText = document.body.innerText.toLowerCase();
+        
+        const chapterCount = (bodyText.match(/\b(chapter|capitulo|capítulo|scan|read|ler|manhwa|manhua)\b/g) || []).length;
+        const episodeCount = (bodyText.match(/\b(episode|episodio|episódio|ep|watch|assistir|temporada|stream)\b/g) || []).length;
+
+        // --- 2. PRIORIDADE HOMEPAGE: Tipo predominante de conteúdo ---
+        if (isHomePage) {
+            if (chapterCount > episodeCount) return 'manga';
+            if (episodeCount > chapterCount) return 'anime';
+        }
+
+        // --- 3. PRIORIDADE SECUNDÁRIA: Elementos da página (Títulos/Meta/Botões) ---
+        const title = document.title.toLowerCase();
+        const metaDesc = document.querySelector('meta[name="description"]')?.content.toLowerCase() || "";
+        
+        const pageMangaKw = ['manga', 'manhwa', 'manhua', 'read', 'ler', 'capítulo', 'capitulo', 'chapter', 'scan'];
+        const pageAnimeKw = ['anime', 'episódio', 'episodio', 'episode', 'watch', 'assistir', 'temporada', 'season', 'stream'];
+        
+        let pageMangaScore = chapterCount;
+        let pageAnimeScore = episodeCount;
+        
+        pageMangaKw.forEach(kw => {
+            if (title.includes(kw)) pageMangaScore += 10;
+            if (metaDesc.includes(kw)) pageMangaScore += 10;
+        });
+        
+        pageAnimeKw.forEach(kw => {
+            if (title.includes(kw)) pageAnimeScore += 10;
+            if (metaDesc.includes(kw)) pageAnimeScore += 10;
+        });
+
+        if (pageMangaScore > pageAnimeScore) return 'manga';
+        if (pageAnimeScore > pageMangaScore) return 'anime';
+
+        // --- 4. FALLBACK: Estimativa com base no contexto histórico ---
         return 'anime';
     }
 }
 
 class TextNormalizer {
-    /**
-     * Strips punctuation, accents, and irrelevant keywords to create a clean string for fuzzy matching.
-     * @param {string} str - The raw title string extracted from the DOM.
-     * @returns {string} The normalized string.
-     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
@@ -101,10 +131,6 @@ class TextNormalizer {
         return clean.trim();
     }
 
-    /**
-     * Extracts a potential title from the URL path as a fallback mechanism.
-     * @returns {string|null} The extracted slug or null if invalid.
-     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
@@ -118,12 +144,6 @@ class TextNormalizer {
 }
 
 class Matcher {
-    /**
-     * Performs a fuzzy string comparison to match DOM titles with MAL titles.
-     * @param {string} siteTitle - The normalized title from the website.
-     * @param {string} malTitle - The normalized title from MyAnimeList.
-     * @returns {boolean} True if the strings are a likely match.
-     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 

@@ -1,9 +1,8 @@
 /**
- * Background Service Worker - v37.0 (I18n Service Integration)
- * Arquitetura: Services Pattern com Idempotência e Data Normalization
+ * Background Service Worker - v38.0 (Parallel API Fetching & I18n)
+ * Arquitetura: Services Pattern com Idempotência e Concorrência.
  */
 
-// Import I18n Service dynamically for Service Worker
 try { importScripts("i18n.js"); } catch (e) { console.error("Could not load i18n", e); }
 
 const CONFIG = {
@@ -75,25 +74,17 @@ class MalService {
 
 // --- SERVICE: RELEASE MONITOR ---
 class ReleaseMonitorService {
-
     static async setupAlarm() {
         const { monitorEnabled } = await chrome.storage.local.get('monitorEnabled');
-        
         await chrome.alarms.clear(CONFIG.ALARM_NAME);
 
         if (monitorEnabled) {
-            chrome.alarms.create(CONFIG.ALARM_NAME, {
-                periodInMinutes: CONFIG.CHECK_INTERVAL_MIN
-            });
-            console.log(`[Monitor] Alarme ativo. Verificação a cada ${CONFIG.CHECK_INTERVAL_MIN} minutos.`);
-        } else {
-            console.log("[Monitor] Monitorização desativada.");
+            chrome.alarms.create(CONFIG.ALARM_NAME, { periodInMinutes: CONFIG.CHECK_INTERVAL_MIN });
         }
     }
 
     static async checkNewReleases() {
         const store = await chrome.storage.local.get(['malUsername', 'monitorUrl', 'seenEpisodes']);
-        
         const username = store.malUsername;
         const monitorUrl = store.monitorUrl;
         let seenEpisodes = store.seenEpisodes || {}; 
@@ -101,8 +92,6 @@ class ReleaseMonitorService {
         if (!username || !monitorUrl) return;
 
         try {
-            console.log(`[Monitor] A verificar: ${monitorUrl}`);
-            
             const [htmlText, allItems] = await Promise.all([
                 this.fetchSiteContent(monitorUrl),
                 MalService.fetchAllUserItems(username)
@@ -132,7 +121,6 @@ class ReleaseMonitorService {
             if (stateChanged) {
                 await chrome.storage.local.set({ seenEpisodes });
             }
-
         } catch (error) {
             console.error("[Monitor] Falha na verificação:", error);
         }
@@ -155,15 +143,10 @@ class ReleaseMonitorService {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), 15000);
         try {
-            const response = await fetch(url, { 
-                signal: controller.signal,
-                cache: "no-store" 
-            });
+            const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
             clearTimeout(id);
             return await response.text();
-        } catch (e) {
-            return "";
-        }
+        } catch (e) { return ""; }
     }
 
     static detectRelease(html, title, episodeNumber) {
@@ -176,25 +159,19 @@ class ReleaseMonitorService {
             const escapedTitle = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
             const pattern = new RegExp(`${escapedTitle}[\\s\\S]{0,150}?\\b(ep|episodio|episode|e)?\\s*0*${episodeNumber}\\b`, "i");
             return pattern.test(cleanHtml);
-        } catch (e) {
-            return false;
-        }
+        } catch (e) { return false; }
     }
 
     static async sendNotification(items) {
-        // Obter idioma local e usar I18nService
         const lang = await I18nService.getCurrentLang();
-        
         const message = items.length === 1 
             ? `${I18nService.get('notifNew', lang)}: ${items[0]}`
             : `${items.length} ${I18nService.get('notifMultiple', lang)}`;
 
         chrome.notifications.create({
-            type: 'basic',
-            iconUrl: 'icon.png',
+            type: 'basic', iconUrl: 'icon.png',
             title: I18nService.get('notifTitle', lang),
-            message: message,
-            priority: 2
+            message: message, priority: 2
         });
 
         await this.saveToHistory(items);
@@ -202,11 +179,7 @@ class ReleaseMonitorService {
 
     static async saveToHistory(items) {
         const timestamp = Date.now();
-        const newEntries = items.map(itemString => ({
-            text: itemString,
-            date: timestamp,
-            read: false
-        }));
+        const newEntries = items.map(text => ({ text, date: timestamp, read: false }));
 
         const data = await chrome.storage.local.get('notificationLog');
         let logs = data.notificationLog || [];
@@ -230,15 +203,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === "SEARCH_ITEM") {
         const query = encodeURIComponent(request.title);
-        const itemType = request.itemType || 'anime'; 
         
-        fetch(`https://api.jikan.moe/v4/${itemType}?q=${query}&limit=5`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.data && data.data.length > 0) sendResponse({ success: true, results: data.data });
-                else sendResponse({ success: false, error: "Not found" });
-            })
-            .catch(err => sendResponse({ success: false, error: err.message }));
+        // Estratégia de Concorrência: Pesquisa em AMBAS as APIs simultaneamente
+        // para garantir que apanhamos sinónimos tanto de Mangas como Animes.
+        Promise.all([
+            fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=3`).then(res => res.json()).catch(() => ({ data: [] })),
+            fetch(`https://api.jikan.moe/v4/manga?q=${query}&limit=3`).then(res => res.json()).catch(() => ({ data: [] }))
+        ])
+        .then(([animeRes, mangaRes]) => {
+            const results = [];
+            if (animeRes && animeRes.data) results.push(...animeRes.data.map(item => ({ ...item, type: 'anime' })));
+            if (mangaRes && mangaRes.data) results.push(...mangaRes.data.map(item => ({ ...item, type: 'manga' })));
+            
+            if (results.length > 0) sendResponse({ success: true, results: results });
+            else sendResponse({ success: false, error: "Not found" });
+        })
+        .catch(err => sendResponse({ success: false, error: err.message }));
+        
         return true;
     }
 
@@ -250,16 +231,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === CONFIG.ALARM_NAME) {
-        ReleaseMonitorService.checkNewReleases();
-    }
+    if (alarm.name === CONFIG.ALARM_NAME) ReleaseMonitorService.checkNewReleases();
 });
 
 chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.storage.local.get('monitorUrl', (result) => {
-        if (result.monitorUrl) {
-            chrome.tabs.create({ url: result.monitorUrl });
-        }
+        if (result.monitorUrl) chrome.tabs.create({ url: result.monitorUrl });
     });
     chrome.notifications.clear(notificationId);
 });

@@ -9,19 +9,15 @@ class MalController {
         this.observer = null;
         this.debounceTimer = null;
         this.isSearching = false;
-        this.isPanelEnabled = true; // Default state
+        this.isPanelEnabled = true; 
     }
 
-    /**
-     * Bootstraps the highlighter logic. Retrieves user preferences before starting.
-     */
     async init() {
         if (!PerformanceGuard.isRelevantPage()) return;
         
         try {
-            // Retrieve User Settings
             const settings = await chrome.storage.local.get(['panelEnabled', 'panelTransparent']);
-            this.isPanelEnabled = settings.panelEnabled !== false; // Defaults to true if undefined
+            this.isPanelEnabled = settings.panelEnabled !== false; 
             UIManager.setTransparency(settings.panelTransparent === true);
 
             this.globalMediaMap = await DataManager.getUserList();
@@ -31,12 +27,8 @@ class MalController {
         }
     }
 
-    /**
-     * Queries the Jikan API as a fallback when an item appears to be the main focus but is not in the local map.
-     * @param {string} rawTitle - The extracted title from the DOM.
-     */
     searchAndShowPanel(rawTitle) {
-        if (!this.isPanelEnabled) return; // Prevent feature usage if disabled
+        if (!this.isPanelEnabled) return; 
         if (this.isSearching) return;
         if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
         
@@ -46,44 +38,66 @@ class MalController {
         this.isSearching = true;
         document.body.style.cursor = 'wait';
 
+        // O tipo de mídia inferido pelas tuas regras
         const currentMediaType = ContextAnalyzer.guessContentType();
 
         chrome.runtime.sendMessage({ 
             action: "SEARCH_ITEM", 
-            title: cleanQuery,
-            itemType: currentMediaType 
+            title: cleanQuery
         }, (response) => {
             this.isSearching = false;
             document.body.style.cursor = 'default';
             
             if (response && response.success && response.results) {
                 let bestMatch = null;
-                for (const item of response.results) {
-                    const itemTitleNorm = TextNormalizer.normalize(item.title);
-                    if (Matcher.isFuzzyMatch(cleanQuery, itemTitleNorm)) {
-                        bestMatch = item;
-                        break; 
+                let finalStatus = null;
+                let finalType = null;
+
+                // 1. Procurar nas respostas da API apenas itens que correspondam ao TIPO EXATO do site (Anime vs Manga)
+                for (const apiItem of response.results) {
+                    // Impede que um Anime seja aberto num site de Manga e vice-versa
+                    if (apiItem.type !== currentMediaType) continue;
+
+                    for (let [localTitle, localDataArray] of this.globalMediaMap.entries()) {
+                        // Correspondência Estrita no tipo de ficheiro local
+                        const foundInList = localDataArray.find(v => v.id === apiItem.mal_id && v.type === currentMediaType);
+                        
+                        if (foundInList) {
+                            bestMatch = apiItem;
+                            finalStatus = foundInList.status;
+                            finalType = foundInList.type;
+                            
+                            // Auto-Aprendizagem de Sinónimos
+                            if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
+                                SynonymDictionary.save(cleanQuery, localTitle);
+                                console.log(`[MAL Highlighter] Learned synonym: "${cleanQuery}" -> "${localTitle}"`);
+                                setTimeout(() => this.processPage(), 200);
+                            }
+                            break;
+                        }
+                    }
+                    if (bestMatch) break; 
+                }
+
+                // Fallback de pesquisa: Se não tiver na lista, tenta mostrar a info geral no painel
+                if (!bestMatch) {
+                    for (const apiItem of response.results) {
+                        const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
+                        if (apiItem.type === currentMediaType && Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm)) {
+                            bestMatch = apiItem;
+                            finalType = apiItem.type;
+                            break;
+                        }
                     }
                 }
 
                 if (!bestMatch) return;
 
-                let finalStatus = null;
-                for (let [key, valArray] of this.globalMediaMap.entries()) {
-                    const found = valArray.find(v => v.id === bestMatch.mal_id && v.type === currentMediaType);
-                    if (found) {
-                        finalStatus = found.status;
-                        break;
-                    }
-                }
-                UIManager.showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus, type: currentMediaType });
+                UIManager.showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus, type: finalType });
             }
         });
     }
 
-    /**
-     * Analyzes the DOM to find titles, highlight cards, and detect the "main" item being viewed.
-     */
     processPage() {
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, [class*="title"], [class*="nome"], article h3, li h3';
         const candidates = document.querySelectorAll(selector);
@@ -110,8 +124,10 @@ class MalController {
             const lowerText = text.toLowerCase();
             if (UI_BLOCKLIST.some(term => lowerText.includes(term))) continue;
 
-            const itemTitle = TextNormalizer.normalize(text);
-            if (!itemTitle || itemTitle.length < 3) continue;
+            const itemTitleRaw = TextNormalizer.normalize(text);
+            if (!itemTitleRaw || itemTitleRaw.length < 3) continue;
+
+            const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
 
             processedCount++;
 
@@ -131,7 +147,9 @@ class MalController {
 
             let match = null;
             if (matchArray && matchArray.length > 0) {
-                match = matchArray.find(m => m.type === currentMediaType) || matchArray[0];
+                // Correspondência ESTRITA: Só aplica destaque se o tipo coincidir. 
+                // Sem fallback para "|| matchArray[0]". Evita Chainsaw Man Anime a aparecer no Manga.
+                match = matchArray.find(m => m.type === currentMediaType);
             }
 
             if (match) {
@@ -139,7 +157,6 @@ class MalController {
                 if (card) UIManager.applyVisuals(card, match.status);
             }
 
-            // Floating Panel Logic Guard
             if (this.isPanelEnabled && !foundMainItem && !isHomePage) {
                 const tag = element.tagName;
                 const isHead1 = tag === 'H1'; 
@@ -166,10 +183,12 @@ class MalController {
                 const normUrlTitle = TextNormalizer.normalize(urlTitle);
                 if (!UI_BLOCKLIST.some(term => normUrlTitle.includes(term))) {
                      
-                     let matchArray = this.globalMediaMap.get(normUrlTitle);
+                     const resolvedUrlTitle = SynonymDictionary.resolve(normUrlTitle);
+                     let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
+                     
                      if (!matchArray) {
                          for (let [malTitle, dataArray] of this.globalMediaMap) {
-                             if (Matcher.isFuzzyMatch(normUrlTitle, malTitle)) {
+                             if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
                                  matchArray = dataArray;
                                  break;
                              }
@@ -178,7 +197,8 @@ class MalController {
 
                      let match = null;
                      if (matchArray && matchArray.length > 0) {
-                         match = matchArray.find(m => m.type === currentMediaType) || matchArray[0];
+                         // Correspondência Estrita Fallback URL
+                         match = matchArray.find(m => m.type === currentMediaType);
                      }
                      
                      if (match && !panelVisible) {
@@ -197,9 +217,6 @@ class MalController {
         }
     }
 
-    /**
-     * Initializes the MutationObserver to handle dynamically loaded content.
-     */
     startObserver() {
         if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
         
@@ -215,10 +232,6 @@ class MalController {
     }
 }
 
-// --- BOOT PROCESS ---
 const app = new MalController();
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => app.init());
-} else {
-    app.init();
-}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => app.init());
+else app.init();
