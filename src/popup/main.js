@@ -10,7 +10,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentLang = await I18nService.getCurrentLang();
     I18nService.translateDOM(currentLang);
 
-    // Doms References - Tabs
+    // Doms References - Theme & Tabs
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
     
@@ -52,6 +53,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     // ==========================================
+    // UI Interactions: Theme Toggle Logic
+    // ==========================================
+    
+    // Define o ícone inicial correto (lê do atributo atualizado pelo theme-loader)
+    const updateThemeIcon = () => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        themeToggleBtn.innerText = isDark ? '☀️' : '🌙';
+    };
+    updateThemeIcon();
+
+    themeToggleBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const newTheme = isDark ? 'light' : 'dark';
+        
+        // Atualiza a view imediatamente e manda gravar na storage
+        document.documentElement.setAttribute('data-theme', newTheme);
+        updateThemeIcon();
+        chrome.storage.local.set({ theme: newTheme });
+    });
+
+    // ==========================================
     // UI Interactions: Accordions & Dynamic Rows
     // ==========================================
     
@@ -68,14 +90,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         hlStatusCheckboxes.forEach(cb => {
             const statusId = cb.value;
             const colorRow = document.getElementById(`color-row-${statusId}`);
-            if (colorRow) {
-                // Se a checkbox estiver inativa, esconde o row da cor correspondente
-                colorRow.style.display = cb.checked ? 'flex' : 'none';
-            }
+            if (colorRow) colorRow.style.display = cb.checked ? 'flex' : 'none';
         });
     };
 
-    // Escutar por mudanças nas checkboxes em tempo real
     hlStatusCheckboxes.forEach(cb => {
         cb.addEventListener('change', syncColorVisibility);
     });
@@ -127,7 +145,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
-        // Aplicar a lógica visual dinâmica após preencher os dados gravados
         syncColorVisibility();
     });
 

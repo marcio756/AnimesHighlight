@@ -82,14 +82,30 @@ class UIManager {
         const panel = document.createElement('div');
         panel.id = 'malControlPanel';
         panel.className = 'mal-control-panel';
+
+        // 1. Vai buscar o tema inicial da storage
+        chrome.storage.local.get(['theme'], (res) => {
+            panel.setAttribute('data-theme', res.theme || 'light');
+        });
+
+        // 2. Escuta mudanças em tempo real se o utilizador clicar no popup
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (area === 'local' && changes.theme) {
+                const p = document.getElementById('malControlPanel');
+                if (p) p.setAttribute('data-theme', changes.theme.newValue);
+            }
+        });
+
+        // NOTA: As cores estáticas do fundo (#2a2a2a) e do texto (#ddd) foram
+        // substituídas por variáveis CSS para garantirem legibilidade dinâmica.
         panel.innerHTML = `
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <select id="malStatusSelect" class="mal-status-dropdown"></select>
                 </div>
-                <div id="malProgressWrap" style="display: none; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 5px 8px; border-radius: 4px;">
-                    <span id="malProgressText" style="font-size: 11px; color: #ddd; font-weight: bold;"></span>
+                <div id="malProgressWrap" style="display: none; justify-content: space-between; align-items: center; background: var(--mal-progress-bg); padding: 5px 8px; border-radius: 4px;">
+                    <span id="malProgressText" style="font-size: 11px; color: var(--mal-panel-text); font-weight: bold;"></span>
                     <div style="display: flex; gap: 4px;">
                         <button id="malQuickDecBtn" class="mal-mini-btn" style="background: #a12f31;">-</button>
                         <button id="malQuickAddBtn" class="mal-mini-btn" style="background: #2db039;">+</button>

@@ -1,4 +1,4 @@
-/* * ==========================================
+/* ==========================================
  * PARTE 1: BORDAS E ETIQUETAS (COM VARIÁVEIS CSS)
  * ==========================================
  */
@@ -39,19 +39,36 @@
 .mal-plan { box-shadow: inset 0 0 0 4px var(--mal-color-6) !important; }
 .mal-plan::after { background: var(--mal-color-6); }
 
-/* * ==========================================
+/* ==========================================
  * PARTE 2: PAINEL DE CONTROLO FLUTUANTE
  * ==========================================
  */
 .mal-control-panel {
+    --mal-panel-bg: #ffffff;
+    --mal-panel-text: #333333;
+    --mal-panel-border: #e1e4e8;
+    --mal-input-bg: #f8f9fa;
+    --mal-progress-bg: #f1f3f5;
+}
+
+.mal-control-panel[data-theme="dark"] {
+    --mal-panel-bg: #1e1e1e;
+    --mal-panel-text: #ffffff;
+    --mal-panel-border: #333333;
+    --mal-input-bg: #333333;
+    --mal-progress-bg: #2a2a2a;
+}
+
+.mal-control-panel {
     position: fixed;
     bottom: 20px; right: 20px;
-    background: #1e1e1e; color: white;
+    background: var(--mal-panel-bg); 
+    color: var(--mal-panel-text);
     padding: 15px; border-radius: 8px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     z-index: 2147483647; 
     font-family: 'Segoe UI', sans-serif;
-    width: 220px; border: 1px solid #333;
+    width: 220px; border: 1px solid var(--mal-panel-border);
     opacity: 0; transform: translateY(20px);
     transition: all 0.3s ease;
     display: none;
@@ -63,12 +80,14 @@
 
 .mal-panel-header {
     font-weight: bold; font-size: 14px;
-    margin-bottom: 12px; border-bottom: 1px solid #444;
+    margin-bottom: 12px; border-bottom: 1px solid var(--mal-panel-border);
     padding-bottom: 5px; color: var(--mal-color-1);
 }
 
 .mal-status-dropdown {
-    background: #333; border: 1px solid #444; color: white;
+    background: var(--mal-input-bg); 
+    border: 1px solid var(--mal-panel-border); 
+    color: var(--mal-panel-text);
     border-radius: 4px; padding: 5px; font-size: 12px;
     width: 100%; cursor: pointer;
 }
