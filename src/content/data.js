@@ -57,6 +57,10 @@ class DataManager {
         });
     }
 
+    static invalidateCache() {
+        localStorage.removeItem(CONFIG.CACHE_KEY);
+    }
+
     static async getUserList() {
         const USERNAME = await this.getUsername();
         const cached = localStorage.getItem(CONFIG.CACHE_KEY);
@@ -86,7 +90,8 @@ class DataManager {
                             id: item.id,
                             score: item.score,
                             rawTitle: item.title,
-                            type: item.type 
+                            type: item.type,
+                            progress: item.type === 'anime' ? (item.num_watched_episodes || 0) : (item.num_read_chapters || 0)
                         });
                     });
                     localStorage.setItem(CONFIG.CACHE_KEY, JSON.stringify({

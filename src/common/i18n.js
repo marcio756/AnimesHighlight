@@ -39,10 +39,13 @@ const DICTIONARY = {
         statusErrorUrl: "Please enter a valid URL.",
         
         panelOpenBtn: "Open MyAnimeList",
+        btnQuickAdd: "Quick Add +1",
         
         notifTitle: "MAL Highlighter Monitor",
         notifNew: "New Release",
         notifMultiple: "New Releases Available!",
+        notifBtnWatch: "Watch Now",
+        notifBtnMarkSeen: "Mark as Seen",
 
         // Status Labels - Split for Context
         statusWatching: "WATCHING",
@@ -96,10 +99,13 @@ const DICTIONARY = {
         statusErrorUrl: "Por favor, insere um URL válido.",
         
         panelOpenBtn: "Abrir no MyAnimeList",
+        btnQuickAdd: "Adicionar Rápido +1",
         
         notifTitle: "Monitor do Realçador MAL",
         notifNew: "Novo Lançamento",
         notifMultiple: "Novos Lançamentos Disponíveis!",
+        notifBtnWatch: "Assistir Agora",
+        notifBtnMarkSeen: "Marcar como Visto",
 
         // Status Labels - Split for Context
         statusWatching: "A VER",

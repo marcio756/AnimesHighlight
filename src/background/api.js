@@ -1,6 +1,6 @@
 /**
  * API Communication Layer
- * @description Handles fetching data from MyAnimeList and Jikan APIs, including intelligent background synonym sync.
+ * @description Handles fetching data from MyAnimeList and Jikan APIs, including intelligent background synonym sync and authenticated requests.
  */
 
 class ActiveItemsSynonymFetcher {
@@ -121,6 +121,38 @@ class MalService {
             return combined;
         } catch (error) {
             console.error("[MalService] Error combining lists:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Updates user progress on MyAnimeList utilizing OAuth2.
+     * @param {number} id - Media ID.
+     * @param {string} type - 'anime' or 'manga'.
+     * @param {number} progress - New episode or chapter number.
+     * @returns {Promise<Object>} Response from MAL API.
+     */
+    static async updateListEntry(id, type, progress) {
+        try {
+            const token = await AuthService.getAccessToken();
+            const url = `https://api.myanimelist.net/v2/${type}/${id}/my_list_status`;
+            const bodyParam = type === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
+            
+            const response = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({
+                    [bodyParam]: progress
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to update MAL list');
+            return await response.json();
+        } catch (error) {
+            console.error("[MalService] Error updating entry:", error);
             throw error;
         }
     }

@@ -64,7 +64,12 @@ class ReleaseMonitorService {
                 }
 
                 if (releaseDetected) {
-                    notificationsQueue.push(`${anime.title} - Ep ${nextEp}`);
+                    notificationsQueue.push({
+                        title: anime.title,
+                        id: anime.id,
+                        type: anime.type,
+                        nextEp: nextEp
+                    });
                     this.markEpisodeAsSeen(seenEpisodes, animeId, nextEp);
                     stateChanged = true;
                 }
@@ -119,16 +124,34 @@ class ReleaseMonitorService {
 
     static async sendNotification(items) {
         const lang = await I18nService.getCurrentLang();
-        const message = items.length === 1 
-            ? `${I18nService.get('notifNew', lang)}: ${items[0]}`
-            : `${items.length} ${I18nService.get('notifMultiple', lang)}`;
+        
+        items.forEach(async item => {
+            const notifId = `mal_notif_${item.id}_${item.nextEp}_${Date.now()}`;
+            const message = `${item.title} - Ep ${item.nextEp}`;
+            
+            chrome.notifications.create(notifId, {
+                type: 'basic', 
+                iconUrl: 'icon.png',
+                title: I18nService.get('notifNew', lang),
+                message: message, 
+                priority: 2,
+                buttons: [
+                    { title: I18nService.get('notifBtnWatch', lang) },
+                    { title: I18nService.get('notifBtnMarkSeen', lang) }
+                ]
+            });
 
-        chrome.notifications.create({
-            type: 'basic', iconUrl: 'icon.png',
-            title: I18nService.get('notifTitle', lang),
-            message: message, priority: 2
+            const storageRes = await chrome.storage.local.get('notificationMeta');
+            const notificationMeta = storageRes.notificationMeta || {};
+            notificationMeta[notifId] = item;
+            
+            const keys = Object.keys(notificationMeta);
+            if (keys.length > 50) delete notificationMeta[keys[0]];
+            
+            await chrome.storage.local.set({ notificationMeta });
         });
-        await this.saveToHistory(items);
+
+        await this.saveToHistory(items.map(i => `${i.title} - Ep ${i.nextEp}`));
     }
 
     static async saveToHistory(items) {

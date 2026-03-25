@@ -15,7 +15,7 @@ Debounce Dinâmico: O tempo de espera do debounce deve aumentar consoante o nív
 Migração para ES Modules: Atualmente, os teus Content Scripts injetam classes globais (class ContextAnalyzer, class UIManager) num único ambiente. A forma correta moderna é adicionar "type": "module" aos ficheiros e usar import { ContextAnalyzer } from './utils.js', isolando o escopo (scope) e impedindo que o teu código entre em conflito com variáveis globais do site que o utilizador está a visitar.
 Tipagem Estática (JSDoc Avançado ou TypeScript): Tens muitos objetos complexos a viajar do background.js para o content.js. Adotar TypeScript garante que se mudares a chave manga_title para title num lado, o compilador avisa-te do outro lado, extinguindo runtime errors.
 
-5. Experiência do Utilizador (UX)
+5. Experiência do Utilizador (UX) - FEITO
 Página de Onboarding (Welcome Page): Quando a extensão é instalada pela primeira vez, abrir um separador com uma página limpa e bonita (HTML independente) explicando passo-a-passo como colocar o Username e como o painel funciona, em vez de esperar que o utilizador clique no ícone pequeno e descubra sozinho.
 Painel de Controlo Flexível: Permitir arrastar o painel flutuante ("Drag & Drop"). Se o painel tapar as legendas ou o vídeo do utilizador, ele deve poder agarrar no painel e movê-lo para o canto superior esquerdo temporariamente(deve ser possivel escolher nas settings se é temporario ou nao).
 Controlo de Destaques: Uma opção nas Settings tipo checkboxes: "Destacar apenas Animes a Ver". Muitos utilizadores não querem poluir visualmente sites com uma cor cinzenta para animes "Planeados" ou vermelha para "Desistidos", querem focar-se apenas nos atuais por isso deve ser possivel escolher o que quer destacar.

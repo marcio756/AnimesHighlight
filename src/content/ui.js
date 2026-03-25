@@ -28,7 +28,6 @@ class UIManager {
         const styleInfo = STATUS_MAP[statusId];
         if (!styleInfo) return;
 
-        // Lógica de Contexto: Se for status 1 (Watching), decide entre Watch ou Read
         let labelKey = styleInfo.labelKey;
         if (statusId === 1) {
             labelKey = (mediaType === 'manga') ? 'statusReading' : 'statusWatching';
@@ -67,14 +66,17 @@ class UIManager {
         panel.className = 'mal-control-panel';
         panel.innerHTML = `
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
-            <div class="mal-control-row" style="justify-content: center; margin-bottom: 15px;">
+            <div class="mal-control-row" style="justify-content: space-between; margin-bottom: 15px;">
                 <span id="malStatusText" style="font-size: 12px; color: #aaa; font-weight: 600;">${I18nService.get('statusChecking', this.currentLanguage)}</span>
+                <div id="malProgressWrap" style="display: none; align-items: center; gap: 5px;">
+                    <span id="malProgressText" style="font-size: 11px; color: #ddd;"></span>
+                    <button id="malQuickAddBtn" class="mal-mini-btn" title="${I18nService.get('btnQuickAdd', this.currentLanguage)}">+</button>
+                </div>
             </div>
             <button class="mal-update-btn" id="malOpenBtn">${I18nService.get('panelOpenBtn', this.currentLanguage)}</button>
         `;
         document.body.appendChild(panel);
         
-        // Initialize dragging behavior using the newly abstracted logic
         const header = document.getElementById('malPanelTitle');
         DraggableService.init(panel, header, this.savePanelPosition);
     }
@@ -85,13 +87,15 @@ class UIManager {
         const titleEl = document.getElementById('malPanelTitle');
         const statusEl = document.getElementById('malStatusText');
         const btn = document.getElementById('malOpenBtn');
+        const progressWrap = document.getElementById('malProgressWrap');
+        const progressText = document.getElementById('malProgressText');
+        const quickAddBtn = document.getElementById('malQuickAddBtn');
         
         titleEl.innerText = itemName.substring(0, 30) + (itemName.length > 30 ? '...' : '');
         
         if (data && data.status && STATUS_MAP[data.status]) {
             const styleInfo = STATUS_MAP[data.status];
             
-            // Lógica de Contexto também no Painel Flutuante
             let labelKey = styleInfo.labelKey;
             const mediaType = data.type || ContextAnalyzer.guessContentType();
             if (data.status === 1) {
@@ -100,9 +104,49 @@ class UIManager {
 
             statusEl.innerText = I18nService.get(labelKey, this.currentLanguage);
             statusEl.style.color = styleInfo.color;
+
+            // Integrar Controlador de Progresso e Quick-Add
+            if (data.progress !== undefined) {
+                const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
+                progressText.innerText = `${prefix}: ${data.progress}`;
+                progressWrap.style.display = 'flex';
+                
+                // Evita acumular Listeners e permite isolar a função
+                const newBtn = quickAddBtn.cloneNode(true);
+                quickAddBtn.parentNode.replaceChild(newBtn, quickAddBtn);
+                
+                newBtn.onclick = () => {
+                    newBtn.disabled = true;
+                    newBtn.innerText = '...';
+                    const nextVal = data.progress + 1;
+                    
+                    chrome.runtime.sendMessage({
+                        action: "UPDATE_PROGRESS",
+                        id: data.id,
+                        mediaType: mediaType,
+                        progress: nextVal
+                    }, (response) => {
+                        if (response && response.success) {
+                            data.progress = nextVal;
+                            progressText.innerText = `${prefix}: ${nextVal}`;
+                            newBtn.innerText = '✓';
+                            DataManager.invalidateCache(); // Força renovação da cache ao próximo recarregamento
+                            setTimeout(() => { newBtn.innerText = '+'; newBtn.disabled = false; }, 2000);
+                        } else {
+                            newBtn.innerText = 'X';
+                            newBtn.title = "OAuth Login Required";
+                            setTimeout(() => { newBtn.innerText = '+'; newBtn.disabled = false; }, 3000);
+                        }
+                    });
+                };
+            } else {
+                progressWrap.style.display = 'none';
+            }
+
         } else {
             statusEl.innerText = I18nService.get('statusNotInList', this.currentLanguage);
             statusEl.style.color = "#aaa";
+            progressWrap.style.display = 'none';
         }
         
         btn.onclick = () => {

@@ -4,7 +4,7 @@
  */
 
 try { 
-    importScripts("../common/i18n.js", "api.js", "monitor.js"); 
+    importScripts("../common/i18n.js", "auth.js", "api.js", "monitor.js"); 
 } catch (e) { 
     console.error("Failed to load background modules", e); 
 }
@@ -41,6 +41,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         ReleaseMonitorService.checkNewReleases(); 
         sendResponse({ success: true });
     }
+
+    if (request.action === "UPDATE_PROGRESS") {
+        MalService.updateListEntry(request.id, request.mediaType, request.progress)
+            .then(data => sendResponse({ success: true, data: data }))
+            .catch(err => sendResponse({ success: false, error: err.message }));
+        return true;
+    }
 });
 
 // Alarm Triggers
@@ -48,12 +55,37 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === MONITOR_CONFIG.ALARM_NAME) ReleaseMonitorService.checkNewReleases();
 });
 
-// Notifications Click Triggers
+// Notifications Click Triggers (Fallback without buttons)
 chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.storage.local.get('monitorUrl', (result) => {
         if (result.monitorUrl) chrome.tabs.create({ url: result.monitorUrl });
     });
     chrome.notifications.clear(notificationId);
+});
+
+// Notifications Action Buttons (Rich Notifications Sync-Back)
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+    chrome.storage.local.get(['notificationMeta', 'monitorUrl'], (res) => {
+        const meta = res.notificationMeta && res.notificationMeta[notificationId];
+        if (!meta) return;
+
+        if (buttonIndex === 0) {
+            // Button: Watch Now
+            if (res.monitorUrl) chrome.tabs.create({ url: res.monitorUrl });
+        } else if (buttonIndex === 1) {
+            // Button: Mark as Seen (Sync-Back)
+            MalService.updateListEntry(meta.id, meta.type, meta.nextEp)
+                .then(() => {
+                    chrome.notifications.create({
+                        type: 'basic', iconUrl: 'icon.png',
+                        title: 'MAL Highlighter',
+                        message: `Successfully marked ${meta.title} episode ${meta.nextEp} as seen.`, priority: 1
+                    });
+                })
+                .catch(err => console.error("[Sync-Back] Update failed", err));
+        }
+        chrome.notifications.clear(notificationId);
+    });
 });
 
 // Lifecycle Hooks
