@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // UI Interactions: Theme Toggle Logic
     // ==========================================
     
-    // Define o ícone inicial correto (lê do atributo atualizado pelo theme-loader)
     const updateThemeIcon = () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         themeToggleBtn.innerText = isDark ? '☀️' : '🌙';
@@ -67,7 +66,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
         
-        // Atualiza a view imediatamente e manda gravar na storage
         document.documentElement.setAttribute('data-theme', newTheme);
         updateThemeIcon();
         chrome.storage.local.set({ theme: newTheme });
@@ -77,7 +75,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // UI Interactions: Accordions & Dynamic Rows
     // ==========================================
     
-    // Collapsible Sections (Accordions)
     document.querySelectorAll('.settings-header').forEach(header => {
         header.addEventListener('click', () => {
             const card = header.parentElement;
@@ -85,7 +82,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Dynamic Visibility for Colors based on Highlight Status
     const syncColorVisibility = () => {
         hlStatusCheckboxes.forEach(cb => {
             const statusId = cb.value;
@@ -99,14 +95,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ==========================================
-    // Core Logic Initialization
+    // Core Logic Initialization (Atualizado com Callback para o X)
     // ==========================================
 
     const loadNotifications = () => {
         chrome.storage.local.get('notificationLog', (result) => {
-            PopupUI.renderNotifications(result.notificationLog || [], notifListEl, emptyStateEl, clearNotifsBtn);
+            PopupUI.renderNotifications(
+                result.notificationLog || [], 
+                notifListEl, 
+                emptyStateEl, 
+                clearNotifsBtn,
+                (updatedLogs) => {
+                    // Guarda o array atualizado e recarrega a vista na hora
+                    chrome.storage.local.set({ notificationLog: updatedLogs }, () => {
+                        loadNotifications(); 
+                    });
+                }
+            );
         });
     };
+    
     const loadMonitorFeedback = () => {
         PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
     };

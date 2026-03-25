@@ -15,7 +15,10 @@ class ReleaseMonitorService {
         await chrome.alarms.clear(MONITOR_CONFIG.ALARM_NAME);
 
         if (monitorEnabled) {
-            chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN });
+            chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { 
+                delayInMinutes: 1, 
+                periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN 
+            });
         }
     }
 
@@ -34,30 +37,32 @@ class ReleaseMonitorService {
                 MalService.fetchAllUserItems(username)
             ]);
 
-            const watchingAnimeList = allItems.filter(a => a.status === 1 && a.type === 'anime'); 
+            const activeItemsList = allItems.filter(item => item.status === 1); 
             let notificationsQueue = [];
             let stateChanged = false;
 
-            for (const anime of watchingAnimeList) {
-                const nextEp = anime.num_watched_episodes + 1;
-                const animeId = anime.id;
+            for (const item of activeItemsList) {
+                const isAnime = item.type === 'anime';
+                const progressField = isAnime ? 'num_watched_episodes' : 'num_read_chapters';
+                const nextProgress = (item[progressField] || 0) + 1;
+                const uniqueItemId = `${item.type}_${item.id}`;
 
-                if (this.isEpisodeSeen(seenEpisodes, animeId, nextEp)) continue; 
+                if (this.isItemSeen(seenEpisodes, uniqueItemId, nextProgress)) continue; 
 
-                const normTarget = anime.title.toLowerCase();
-                const titlesToCheck = new Set([anime.title]);
+                const normTarget = item.title.toLowerCase();
+                const titlesToCheck = new Set([item.title]);
                 
-                if (anime.title_eng) titlesToCheck.add(anime.title_eng);
+                if (item.title_eng) titlesToCheck.add(item.title_eng);
 
                 for (const [alias, official] of Object.entries(synonymsCache)) {
-                    if (official === normTarget || official === anime.title) {
+                    if (official === normTarget || official === item.title) {
                         titlesToCheck.add(alias);
                     }
                 }
 
                 let releaseDetected = false;
                 for (const titleVariant of titlesToCheck) {
-                    if (this.detectRelease(htmlText, titleVariant, nextEp)) {
+                    if (this.detectRelease(htmlText, titleVariant, nextProgress)) {
                         releaseDetected = true;
                         break;
                     }
@@ -65,12 +70,13 @@ class ReleaseMonitorService {
 
                 if (releaseDetected) {
                     notificationsQueue.push({
-                        title: anime.title,
-                        id: anime.id,
-                        type: anime.type,
-                        nextEp: nextEp
+                        title: item.title,
+                        id: item.id,
+                        type: item.type,
+                        nextEp: nextProgress
                     });
-                    this.markEpisodeAsSeen(seenEpisodes, animeId, nextEp);
+                    
+                    this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress);
                     stateChanged = true;
                 }
             }
@@ -87,16 +93,16 @@ class ReleaseMonitorService {
         }
     }
 
-    static isEpisodeSeen(seenMap, animeId, episode) {
-        if (!seenMap[animeId]) return false;
-        return seenMap[animeId].includes(episode);
+    static isItemSeen(seenMap, uniqueItemId, progressNumber) {
+        if (!seenMap[uniqueItemId]) return false;
+        return seenMap[uniqueItemId].includes(progressNumber);
     }
 
-    static markEpisodeAsSeen(seenMap, animeId, episode) {
-        if (!seenMap[animeId]) seenMap[animeId] = [];
-        if (!seenMap[animeId].includes(episode)) {
-            seenMap[animeId].push(episode);
-            if (seenMap[animeId].length > 5) seenMap[animeId].shift(); 
+    static markItemAsSeen(seenMap, uniqueItemId, progressNumber) {
+        if (!seenMap[uniqueItemId]) seenMap[uniqueItemId] = [];
+        if (!seenMap[uniqueItemId].includes(progressNumber)) {
+            seenMap[uniqueItemId].push(progressNumber);
+            if (seenMap[uniqueItemId].length > 5) seenMap[uniqueItemId].shift(); 
         }
     }
 
@@ -110,35 +116,57 @@ class ReleaseMonitorService {
         } catch (e) { return ""; }
     }
 
-    static detectRelease(html, title, episodeNumber) {
-        const cleanTitle = title.toLowerCase().replace(/[^a-z0-9 ]/g, "");
-        const cleanHtml = html.toLowerCase(); 
-        if (!cleanHtml.includes(cleanTitle)) return false;
+    /**
+     * Strict Regex Logic to prevent cross-contamination between different anime titles.
+     */
+    static detectRelease(html, title, progressNumber) {
+        if (!html || !title) return false;
+
+        const plainText = html.replace(/<[^>]*>?/gm, ' ');
+        const fullyCleanedText = plainText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, ' ');
+
+        let normalizedTitle = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, ' ').trim();
+
+        if (!normalizedTitle || normalizedTitle.length < 3) return false;
+
+        const titleWords = normalizedTitle.split(' ');
+        if (titleWords.length > 4) {
+             normalizedTitle = titleWords.slice(0, 4).join(' ');
+        }
+
+        if (!fullyCleanedText.includes(normalizedTitle)) return false;
 
         try {
-            const escapedTitle = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-            const pattern = new RegExp(`${escapedTitle}[\\s\\S]{0,150}?\\b(ep|episodio|episode|e)?\\s*0*${episodeNumber}\\b`, "i");
-            return pattern.test(cleanHtml);
+            const escapedTitle = normalizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+            const keywordGroup = "(ep|episodio|episode|e|capitulo|cap|chapter|ch|scan|c)";
+            
+            // Reduced gap dramatically (60 or 15 chars) to stop regex from reading neighboring titles
+            const pattern = new RegExp(`${escapedTitle}(?:.{0,60}?\\b${keywordGroup}\\s*[-:]?\\s*0*${progressNumber}\\b|.{0,15}?\\b0*${progressNumber}\\b)`, "i");
+            return pattern.test(fullyCleanedText);
         } catch (e) { return false; }
     }
 
     static async sendNotification(items) {
         const lang = await I18nService.getCurrentLang();
         
-        // INCREMENT AND SET BADGE COUNTER
         const badgeStore = await chrome.storage.local.get('unreadCount');
         let currentUnread = (badgeStore.unreadCount || 0) + items.length;
         await chrome.storage.local.set({ unreadCount: currentUnread });
         chrome.action.setBadgeText({ text: currentUnread.toString() });
-        chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); // Red circle
+        chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); 
         
+        const storageRes = await chrome.storage.local.get(['notificationMeta', 'monitorUrl']);
+        const notificationMeta = storageRes.notificationMeta || {};
+        const monitorUrl = storageRes.monitorUrl || '';
+
         items.forEach(async item => {
-            const notifId = `mal_notif_${item.id}_${item.nextEp}_${Date.now()}`;
-            const message = `${item.title} - Ep ${item.nextEp}`;
+            const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
+            const prefix = item.type === 'anime' ? 'Ep' : 'Ch';
+            const message = `${item.title} - ${prefix} ${item.nextEp}`;
             
             chrome.notifications.create(notifId, {
                 type: 'basic', 
-                iconUrl: 'icon.png',
+                iconUrl: '/icon.png', // Absolute path forces Chrome to start at the extension root
                 title: I18nService.get('notifNew', lang),
                 message: message, 
                 priority: 2,
@@ -148,22 +176,38 @@ class ReleaseMonitorService {
                 ]
             });
 
-            const storageRes = await chrome.storage.local.get('notificationMeta');
-            const notificationMeta = storageRes.notificationMeta || {};
             notificationMeta[notifId] = item;
-            
-            const keys = Object.keys(notificationMeta);
-            if (keys.length > 50) delete notificationMeta[keys[0]];
-            
-            await chrome.storage.local.set({ notificationMeta });
         });
 
-        await this.saveToHistory(items.map(i => `${i.title} - Ep ${i.nextEp}`));
+        const keys = Object.keys(notificationMeta);
+        if (keys.length > 50) delete notificationMeta[keys[0]];
+        await chrome.storage.local.set({ notificationMeta });
+
+        const historyItems = items.map(i => ({
+            title: i.title,
+            type: i.type,
+            id: i.id,
+            nextEp: i.nextEp,
+            url: monitorUrl
+        }));
+        await this.saveToHistory(historyItems);
     }
 
     static async saveToHistory(items) {
         const timestamp = Date.now();
-        const newEntries = items.map(text => ({ text, date: timestamp, read: false }));
+        const newEntries = items.map(item => {
+            if (typeof item === 'string') {
+                return { text: item, date: timestamp, read: false }; 
+            }
+            return { 
+                text: `${item.title} - ${item.type === 'anime' ? 'Ep' : 'Ch'} ${item.nextEp}`, 
+                url: item.url,
+                id: item.id,
+                type: item.type,
+                date: timestamp, 
+                read: false 
+            };
+        });
 
         const data = await chrome.storage.local.get('notificationLog');
         let logs = data.notificationLog || [];
