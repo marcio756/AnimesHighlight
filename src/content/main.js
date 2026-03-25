@@ -1,6 +1,6 @@
 /**
  * Main Controller Workflow
- * @description Initializes the extension observer and acts as the orchestrator between Data, UI, and Utilities.
+ * @description Initializes the extension observer and acts as the orchestrator between Data, UI, Utilities, and Dictionary.
  */
 
 class MalController {
@@ -19,6 +19,8 @@ class MalController {
         if (!PerformanceGuard.isRelevantPage()) return;
         
         try {
+            await SynonymDictionary.init(); // Essential: Wait for global dictionary load
+            
             const settings = await chrome.storage.local.get(['panelEnabled', 'panelTransparent']);
             this.isPanelEnabled = settings.panelEnabled !== false; 
             UIManager.setTransparency(settings.panelTransparent === true);
@@ -72,19 +74,32 @@ class MalController {
                             finalStatus = foundInList.status;
                             finalType = foundInList.type;
                             
-                            // Auto-learning Synonyms
+                            // Auto-learning Contextual Synonym
                             if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
                                 SynonymDictionary.save(cleanQuery, localTitle);
                                 console.log(`[MAL Highlighter] Learned synonym: "${cleanQuery}" -> "${localTitle}"`);
-                                setTimeout(() => this.processPage(), 200);
                             }
+                            
+                            // Propagate all API-provided synonyms immediately to the Dictionary
+                            if (apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)) {
+                                apiItem.title_synonyms.forEach(syn => {
+                                    const cleanSyn = TextNormalizer.normalize(syn);
+                                    if (cleanSyn && cleanSyn !== localTitle) SynonymDictionary.save(cleanSyn, localTitle);
+                                });
+                            }
+                            
+                            if (apiItem.title_english) {
+                                const cleanEng = TextNormalizer.normalize(apiItem.title_english);
+                                if (cleanEng && cleanEng !== localTitle) SynonymDictionary.save(cleanEng, localTitle);
+                            }
+
+                            setTimeout(() => this.processPage(), 200);
                             break;
                         }
                     }
                     if (bestMatch) break; 
                 }
 
-                // Fallback: If not in list, show general info in the panel
                 if (!bestMatch) {
                     for (const apiItem of response.results) {
                         const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
@@ -113,15 +128,12 @@ class MalController {
         
         let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
         
-        // 1. Scan internal DOM elements
         let foundMainItem = this.scanDomElements(isListingPage, currentMediaType, panelVisible);
 
-        // 2. Scan URL Slug as a Fallback strategy if no main item was identified via DOM
         if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
             foundMainItem = this.analyzeUrlForPanel(currentMediaType, panelVisible);
         }
 
-        // 3. Graceful hide if nothing matched
         if (!foundMainItem) {
             setTimeout(() => { if (!foundMainItem) UIManager.hidePanel(); }, 500);
         }
@@ -135,7 +147,6 @@ class MalController {
      * @returns {boolean} True if the primary subject of the page was found.
      */
     scanDomElements(isListingPage, currentMediaType, panelVisible) {
-        // Extended selector targeting specific anime title classes natively
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
         const candidates = document.querySelectorAll(selector);
         
@@ -165,7 +176,6 @@ class MalController {
             if (this.globalMediaMap.has(itemTitle)) {
                 matchArray = this.globalMediaMap.get(itemTitle);
             } else {
-                // Critical Fix: Increased from 50 to 150 to support long Light Novel/Isekai titles
                 if (itemTitle.length < 150) {
                     for (let [malTitle, dataArray] of this.globalMediaMap) {
                         if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
@@ -181,13 +191,11 @@ class MalController {
                 match = matchArray.find(m => m.type === currentMediaType);
             }
 
-            // Apply Borders Logic
             if (match) {
                 const card = UIManager.findCardContainer(element);
                 if (card) UIManager.applyVisuals(card, match.status, match.type);
             }
 
-            // Floating Panel DOM Logic
             if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
                 const tag = element.tagName;
                 const isHead1 = tag === 'H1'; 

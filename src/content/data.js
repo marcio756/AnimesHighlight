@@ -4,26 +4,38 @@
  */
 
 class SynonymDictionary {
+    static cache = {};
+
     /**
-     * Retrieves the self-learned synonyms cache from local storage.
-     * @returns {Object} Key-Value pairs mapping aliases to official titles.
+     * Initializes the dictionary by loading data from Chrome Storage asynchronously.
+     * @returns {Promise<void>} Resolves when the cache is successfully loaded.
      */
-    static getCache() {
-        try {
-            return JSON.parse(localStorage.getItem('mal_synonyms_cache')) || {};
-        } catch { return {}; }
+    static async init() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['mal_synonyms_cache'], (res) => {
+                this.cache = res.mal_synonyms_cache || {};
+                resolve();
+            });
+        });
     }
 
     /**
-     * Persists a new discovered alias/synonym to storage.
+     * Retrieves the self-learned synonyms cache mapping.
+     * @returns {Object} Key-Value pairs mapping aliases to official titles.
+     */
+    static getCache() {
+        return this.cache;
+    }
+
+    /**
+     * Persists a new discovered alias/synonym to storage and updates current cache.
      * @param {string} alias - The name found on the website.
      * @param {string} officialTitle - The normalized official MAL title.
      */
     static save(alias, officialTitle) {
         if (!alias || !officialTitle) return;
-        const cache = this.getCache();
-        cache[alias] = officialTitle;
-        localStorage.setItem('mal_synonyms_cache', JSON.stringify(cache));
+        this.cache[alias] = officialTitle;
+        chrome.storage.local.set({ mal_synonyms_cache: this.cache });
     }
 
     /**
@@ -32,8 +44,7 @@ class SynonymDictionary {
      * @returns {string} The official title if cached, otherwise the original string.
      */
     static resolve(title) {
-        const cache = this.getCache();
-        return cache[title] || title;
+        return this.cache[title] || title;
     }
 }
 

@@ -1,6 +1,6 @@
 /**
  * Background Monitoring Layer
- * @description Manages alarms, background site scraping, and notification generation.
+ * @description Manages alarms, background site scraping, and notification generation using synonym dictionaries.
  */
 
 const MONITOR_CONFIG = {
@@ -20,10 +20,11 @@ class ReleaseMonitorService {
     }
 
     static async checkNewReleases() {
-        const store = await chrome.storage.local.get(['malUsername', 'monitorUrl', 'seenEpisodes']);
+        const store = await chrome.storage.local.get(['malUsername', 'monitorUrl', 'seenEpisodes', 'mal_synonyms_cache']);
         const username = store.malUsername;
         const monitorUrl = store.monitorUrl;
         let seenEpisodes = store.seenEpisodes || {}; 
+        const synonymsCache = store.mal_synonyms_cache || {};
 
         if (!username || !monitorUrl) return;
 
@@ -43,7 +44,26 @@ class ReleaseMonitorService {
 
                 if (this.isEpisodeSeen(seenEpisodes, animeId, nextEp)) continue; 
 
-                if (this.detectRelease(htmlText, anime.title, nextEp)) {
+                const normTarget = anime.title.toLowerCase();
+                const titlesToCheck = new Set([anime.title]);
+                
+                if (anime.title_eng) titlesToCheck.add(anime.title_eng);
+
+                for (const [alias, official] of Object.entries(synonymsCache)) {
+                    if (official === normTarget || official === anime.title) {
+                        titlesToCheck.add(alias);
+                    }
+                }
+
+                let releaseDetected = false;
+                for (const titleVariant of titlesToCheck) {
+                    if (this.detectRelease(htmlText, titleVariant, nextEp)) {
+                        releaseDetected = true;
+                        break;
+                    }
+                }
+
+                if (releaseDetected) {
                     notificationsQueue.push(`${anime.title} - Ep ${nextEp}`);
                     this.markEpisodeAsSeen(seenEpisodes, animeId, nextEp);
                     stateChanged = true;

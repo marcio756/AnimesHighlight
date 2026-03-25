@@ -1,7 +1,64 @@
 /**
  * API Communication Layer
- * @description Handles fetching data from MyAnimeList and Jikan APIs.
+ * @description Handles fetching data from MyAnimeList and Jikan APIs, including intelligent background synonym sync.
  */
+
+class ActiveItemsSynonymFetcher {
+    /**
+     * Synchronizes synonyms for active items (Watching/Reading) lazily to avoid API rate limits.
+     * @param {Array<Object>} activeItems - Items currently marked with status === 1.
+     */
+    static async sync(activeItems) {
+        const { mal_synonyms_cache } = await chrome.storage.local.get(['mal_synonyms_cache']);
+        const cache = mal_synonyms_cache || {};
+        let updated = false;
+
+        for (const item of activeItems) {
+            const normTitle = item.title.toLowerCase();
+            const syncKey = `jikan_sync_${item.type}_${item.id}`;
+            
+            const storageRes = await chrome.storage.local.get(syncKey);
+            if (storageRes[syncKey]) continue;
+
+            try {
+                const url = `https://api.jikan.moe/v4/${item.type}/${item.id}`;
+                const res = await fetch(url);
+                
+                if (!res.ok) {
+                    if (res.status === 429) break; // Rate limit hit, abort current background sync
+                    continue;
+                }
+                
+                const { data } = await res.json();
+                
+                if (data.title_synonyms && Array.isArray(data.title_synonyms)) {
+                    data.title_synonyms.forEach(syn => {
+                        const cleanSyn = syn.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
+                        if (cleanSyn) cache[cleanSyn] = normTitle;
+                    });
+                    updated = true;
+                }
+                
+                if (data.title_english) {
+                    const cleanEng = data.title_english.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
+                    if (cleanEng) cache[cleanEng] = normTitle;
+                    updated = true;
+                }
+                
+                // Mark item as processed to prevent redundant API calls in future syncs
+                await chrome.storage.local.set({ [syncKey]: true });
+                await new Promise(resolve => setTimeout(resolve, 1500)); // Respect Jikan 3 requests/sec limit
+            } catch (error) {
+                console.error("[ActiveItemsSynonymFetcher] Error fetching synonyms:", error);
+            }
+        }
+
+        if (updated) {
+            await chrome.storage.local.set({ mal_synonyms_cache: cache });
+        }
+    }
+}
+
 class MalService {
     static async fetchList(username, listType) {
         let allItems = [];
@@ -39,6 +96,7 @@ class MalService {
             const normalizedAnimes = animeList.map(item => ({
                 id: item.anime_id,
                 title: item.anime_title,
+                title_eng: item.anime_title_eng || item.anime_english || null,
                 status: item.status,
                 score: item.score,
                 type: 'anime',
@@ -48,13 +106,19 @@ class MalService {
             const normalizedMangas = mangaList.map(item => ({
                 id: item.manga_id,
                 title: item.manga_title,
+                title_eng: item.manga_title_eng || item.manga_english || null,
                 status: item.status,
                 score: item.score,
                 type: 'manga',
                 num_read_chapters: item.num_read_chapters || 0
             }));
 
-            return [...normalizedAnimes, ...normalizedMangas];
+            const combined = [...normalizedAnimes, ...normalizedMangas];
+            
+            const activeItems = combined.filter(item => item.status === 1);
+            ActiveItemsSynonymFetcher.sync(activeItems);
+
+            return combined;
         } catch (error) {
             console.error("[MalService] Error combining lists:", error);
             throw error;
