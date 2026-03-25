@@ -15,20 +15,25 @@
     "128": "icon.png"
   },
   "background": {
-    "service_worker": "src/background/main.js"
+    "service_worker": "src/background/main.js",
+    "type": "module"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": [
-        "src/common/i18n.js",
-        "src/content/utils.js",
-        "src/content/data.js",
-        "src/content/drag.js",
-        "src/content/ui.js",
-        "src/content/main.js"
+        "src/content/content-loader.js"
       ],
       "css": ["src/content/styles.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/common/*.js",
+        "src/content/*.js"
+      ],
+      "matches": ["<all_urls>"]
     }
   ]
 }

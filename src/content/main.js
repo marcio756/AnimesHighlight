@@ -1,12 +1,16 @@
 // src/content/main.js
 
-/**
- * Main Controller Workflow
- * @description Initializes the extension observer and acts as the orchestrator between Data, UI, Utilities, and Dictionary.
- */
+import { PerformanceGuard, ContextAnalyzer, TextNormalizer, Matcher, DynamicDebouncer, UI_BLOCKLIST } from './utils.js';
+import { SynonymDictionary, DataManager } from './data.js';
+import { UIManager } from './ui.js';
 
+/**
+ * @class MalController
+ * @description Inicia o observador de extensões e orquestra Dados, UI, Utilitários e Dicionários.
+ */
 class MalController {
     constructor() {
+        /** @type {Map<string, Array<import('./utils.js').MalItem>>} */
         this.globalMediaMap = new Map();
         this.mutationObserver = null;
         this.intersectionObserver = null;
@@ -42,6 +46,9 @@ class MalController {
         }
     }
 
+    /**
+     * @param {string} rawTitle - O título por normalizar extraído da página
+     */
     searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled) return; 
         if (this.isSearching) return;
@@ -55,10 +62,13 @@ class MalController {
 
         const currentMediaType = ContextAnalyzer.guessContentType();
 
-        chrome.runtime.sendMessage({ 
+        /** @type {import('./utils.js').ExtensionMessage} */
+        const payload = { 
             action: "SEARCH_ITEM", 
             title: cleanQuery
-        }, (response) => {
+        };
+
+        chrome.runtime.sendMessage(payload, (/** @type {import('./utils.js').ExtensionResponse} */ response) => {
             this.isSearching = false;
             document.body.style.cursor = 'default';
             
@@ -118,10 +128,9 @@ class MalController {
     startObserver() {
         if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
         
-        // Setup IntersectionObserver for visibility-driven heavy processing
         const options = {
             root: null,
-            rootMargin: "250px 0px 250px 0px", // Pre-calculate slightly before visual entry to avoid pop-in
+            rootMargin: "250px 0px 250px 0px", 
             threshold: 0
         };
 
@@ -132,21 +141,18 @@ class MalController {
 
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    // Execute heavy logic only when the specific node enters viewport proximity
                     this.processElement(entry.target, isListingPage, currentMediaType, panelVisible);
-                    observer.unobserve(entry.target); // Sever visual binding to prevent cyclic re-processing
+                    observer.unobserve(entry.target); 
                 }
             });
         }, options);
 
-        // Setup Dynamic Debouncer for performance throttling
         this.dynamicDebouncer = new DynamicDebouncer(() => {
             const currentMediaType = ContextAnalyzer.guessContentType();
             let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
             this.analyzeUrlForPanel(currentMediaType, panelVisible);
         });
 
-        // Setup MutationObserver solely for delegating new nodes to IntersectionObserver
         this.mutationObserver = new MutationObserver((mutations) => {
             mutations.forEach(mutation => {
                 mutation.addedNodes.forEach(node => {
@@ -159,12 +165,13 @@ class MalController {
         });
         
         this.mutationObserver.observe(document.body, { childList: true, subtree: true });
-        
-        // Initial page scan delegation
         this.observeNewElements(document.body);
         this.dynamicDebouncer.trigger();
     }
 
+    /**
+     * @param {HTMLElement} rootNode
+     */
     observeNewElements(rootNode) {
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
         
@@ -178,6 +185,12 @@ class MalController {
         }
     }
 
+    /**
+     * @param {HTMLElement} element
+     * @param {boolean} isListingPage
+     * @param {'anime'|'manga'} currentMediaType
+     * @param {boolean} panelVisible
+     */
     processElement(element, isListingPage, currentMediaType, panelVisible) {
         if (element.closest('[data-mal-status]')) return;
         if (element.offsetParent === null) return; 
@@ -236,6 +249,11 @@ class MalController {
         }
     }
 
+    /**
+     * @param {'anime'|'manga'} currentMediaType
+     * @param {boolean} panelVisible
+     * @returns {boolean}
+     */
     analyzeUrlForPanel(currentMediaType, panelVisible) {
         const urlTitle = TextNormalizer.getSlugFromUrl();
         if (!urlTitle || urlTitle.length <= 3) return false;
@@ -272,7 +290,6 @@ class MalController {
     }
 }
 
-// --- BOOT PROCESS ---
 const app = new MalController();
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => app.init());

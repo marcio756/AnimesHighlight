@@ -1,15 +1,15 @@
+// src/background/main.js
+
+import { MalService } from './api.js';
+import { ReleaseMonitorService, MONITOR_CONFIG } from './monitor.js';
+
 /**
- * Main Service Worker Bootstrapper
- * @description Loads dependencies and binds browser events. Orchestrates initialization logic.
+ * Escutador de Rotas de Mensagens
+ * @description Centraliza a receção das payloads tipadas do frontend.
+ * @param {import('../content/utils.js').ExtensionMessage} request - A payload enviada pelo frontend.
+ * @param {chrome.runtime.MessageSender} sender - O emissor.
+ * @param {function(import('../content/utils.js').ExtensionResponse): void} sendResponse - Callback tipado de resposta.
  */
-
-try { 
-    importScripts("../common/i18n.js", "auth.js", "api.js", "monitor.js"); 
-} catch (e) { 
-    console.error("Failed to load background modules", e); 
-}
-
-// Routes Messages from Content Scripts and Popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_MAL_LIST") {
         MalService.fetchAllUserItems(request.username)
@@ -40,9 +40,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         ReleaseMonitorService.setupAlarm();
         ReleaseMonitorService.checkNewReleases(); 
         sendResponse({ success: true });
+        return true;
     }
 
-    // Handles both progress (+/-) and status changes
     if (request.action === "UPDATE_PROGRESS") {
         MalService.updateListEntry(request.id, request.mediaType, request.data)
             .then(data => sendResponse({ success: true, data: data }))
@@ -51,12 +51,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Alarm Triggers
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === MONITOR_CONFIG.ALARM_NAME) ReleaseMonitorService.checkNewReleases();
 });
 
-// Notifications Click Triggers
 chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.storage.local.get('monitorUrl', (result) => {
         if (result.monitorUrl) chrome.tabs.create({ url: result.monitorUrl });
@@ -64,7 +62,6 @@ chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.notifications.clear(notificationId);
 });
 
-// Notifications Action Buttons (Rich Notifications Sync-Back)
 chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
     chrome.storage.local.get(['notificationMeta', 'monitorUrl'], (res) => {
         const meta = res.notificationMeta && res.notificationMeta[notificationId];
@@ -88,7 +85,6 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
     });
 });
 
-// Lifecycle Hooks
 chrome.runtime.onStartup.addListener(() => ReleaseMonitorService.setupAlarm());
 chrome.runtime.onInstalled.addListener((details) => {
     ReleaseMonitorService.setupAlarm();
