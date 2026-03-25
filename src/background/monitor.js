@@ -1,20 +1,27 @@
 /**
  * Background Monitoring Layer
- * @description Manages alarms, background site scraping, and notification generation using synonym dictionaries.
+ * @description Manages alarms, multi-site background scraping, and notification generation using synonym dictionaries.
  */
 
-const MONITOR_CONFIG = {
+import { I18nService } from '../common/i18n.js';
+import { MalService } from './api.js';
+
+export const MONITOR_CONFIG = {
     ALARM_NAME: "MAL_MONITOR_CHECK",
     CHECK_INTERVAL_MIN: 15,
     HISTORY_LIMIT: 100
 };
 
-class ReleaseMonitorService {
+export class ReleaseMonitorService {
     static async setupAlarm() {
-        const { monitorEnabled } = await chrome.storage.local.get('monitorEnabled');
+        const store = await chrome.storage.local.get('monitoredSites');
+        const sites = store.monitoredSites || [];
+        const hasActiveSites = sites.some(site => site.enabled);
+
         await chrome.alarms.clear(MONITOR_CONFIG.ALARM_NAME);
 
-        if (monitorEnabled) {
+        // Apenas cria alarme se houver pelo menos um site ativo
+        if (hasActiveSites) {
             chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { 
                 delayInMinutes: 1, 
                 periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN 
@@ -23,61 +30,73 @@ class ReleaseMonitorService {
     }
 
     static async checkNewReleases() {
-        const store = await chrome.storage.local.get(['malUsername', 'monitorUrl', 'seenEpisodes', 'mal_synonyms_cache']);
+        const store = await chrome.storage.local.get(['malUsername', 'monitoredSites', 'seenEpisodes', 'mal_synonyms_cache']);
         const username = store.malUsername;
-        const monitorUrl = store.monitorUrl;
+        const sites = store.monitoredSites || [];
+        const activeSites = sites.filter(site => site.enabled);
         let seenEpisodes = store.seenEpisodes || {}; 
         const synonymsCache = store.mal_synonyms_cache || {};
 
-        if (!username || !monitorUrl) return;
+        if (!username || activeSites.length === 0) return;
 
         try {
-            const [htmlText, allItems] = await Promise.all([
-                this.fetchSiteContent(monitorUrl),
-                MalService.fetchAllUserItems(username)
-            ]);
-
+            // Requisita a lista do utilizador ao MAL
+            const allItems = await MalService.fetchAllUserItems(username);
             const activeItemsList = allItems.filter(item => item.status === 1); 
+            
             let notificationsQueue = [];
             let stateChanged = false;
 
-            for (const item of activeItemsList) {
-                const isAnime = item.type === 'anime';
-                const progressField = isAnime ? 'num_watched_episodes' : 'num_read_chapters';
-                const nextProgress = (item[progressField] || 0) + 1;
-                const uniqueItemId = `${item.type}_${item.id}`;
+            // Resolve o Scraping de todos os sites em paralelo, sem que um bloqueie os outros
+            const siteFetches = activeSites.map(site => this.fetchSiteContent(site.url).then(html => ({ site, html })));
+            const fetchResults = await Promise.allSettled(siteFetches);
 
-                if (this.isItemSeen(seenEpisodes, uniqueItemId, nextProgress)) continue; 
-
-                const normTarget = item.title.toLowerCase();
-                const titlesToCheck = new Set([item.title]);
+            // Processa o HTML recolhido de cada site ativo
+            for (const result of fetchResults) {
+                if (result.status !== 'fulfilled' || !result.value.html) continue;
                 
-                if (item.title_eng) titlesToCheck.add(item.title_eng);
+                const { site, html } = result.value;
 
-                for (const [alias, official] of Object.entries(synonymsCache)) {
-                    if (official === normTarget || official === item.title) {
-                        titlesToCheck.add(alias);
-                    }
-                }
+                for (const item of activeItemsList) {
+                    const isAnime = item.type === 'anime';
+                    const progressField = isAnime ? 'num_watched_episodes' : 'num_read_chapters';
+                    const nextProgress = (item[progressField] || 0) + 1;
+                    const uniqueItemId = `${item.type}_${item.id}`;
 
-                let releaseDetected = false;
-                for (const titleVariant of titlesToCheck) {
-                    if (this.detectRelease(htmlText, titleVariant, nextProgress)) {
-                        releaseDetected = true;
-                        break;
-                    }
-                }
+                    if (this.isItemSeen(seenEpisodes, uniqueItemId, nextProgress)) continue; 
 
-                if (releaseDetected) {
-                    notificationsQueue.push({
-                        title: item.title,
-                        id: item.id,
-                        type: item.type,
-                        nextEp: nextProgress
-                    });
+                    const normTarget = item.title.toLowerCase();
+                    const titlesToCheck = new Set([item.title]);
                     
-                    this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress);
-                    stateChanged = true;
+                    if (item.title_eng) titlesToCheck.add(item.title_eng);
+
+                    for (const [alias, official] of Object.entries(synonymsCache)) {
+                        if (official === normTarget || official === item.title) {
+                            titlesToCheck.add(alias);
+                        }
+                    }
+
+                    let releaseDetected = false;
+                    for (const titleVariant of titlesToCheck) {
+                        if (this.detectRelease(html, titleVariant, nextProgress)) {
+                            releaseDetected = true;
+                            break;
+                        }
+                    }
+
+                    if (releaseDetected) {
+                        notificationsQueue.push({
+                            title: item.title,
+                            id: item.id,
+                            type: item.type,
+                            nextEp: nextProgress,
+                            siteUrl: site.url,
+                            siteName: site.name
+                        });
+                        
+                        this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress);
+                        stateChanged = true;
+                    }
                 }
             }
 
@@ -89,7 +108,7 @@ class ReleaseMonitorService {
                 await chrome.storage.local.set({ seenEpisodes });
             }
         } catch (error) {
-            console.error("[Monitor] Verification failed:", error);
+            console.error("[Monitor] Multi-Site Verification failed:", error);
         }
     }
 
@@ -108,7 +127,7 @@ class ReleaseMonitorService {
 
     static async fetchSiteContent(url) {
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 15000);
+        const id = setTimeout(() => controller.abort(), 15000); // 15s timeout
         try {
             const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
             clearTimeout(id);
@@ -140,7 +159,6 @@ class ReleaseMonitorService {
             const escapedTitle = normalizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
             const keywordGroup = "(ep|episodio|episode|e|capitulo|cap|chapter|ch|scan|c)";
             
-            // Reduced gap dramatically (60 or 15 chars) to stop regex from reading neighboring titles
             const pattern = new RegExp(`${escapedTitle}(?:.{0,60}?\\b${keywordGroup}\\s*[-:]?\\s*0*${progressNumber}\\b|.{0,15}?\\b0*${progressNumber}\\b)`, "i");
             return pattern.test(fullyCleanedText);
         } catch (e) { return false; }
@@ -155,18 +173,18 @@ class ReleaseMonitorService {
         chrome.action.setBadgeText({ text: currentUnread.toString() });
         chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); 
         
-        const storageRes = await chrome.storage.local.get(['notificationMeta', 'monitorUrl']);
+        const storageRes = await chrome.storage.local.get(['notificationMeta']);
         const notificationMeta = storageRes.notificationMeta || {};
-        const monitorUrl = storageRes.monitorUrl || '';
 
         items.forEach(async item => {
             const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
             const prefix = item.type === 'anime' ? 'Ep' : 'Ch';
-            const message = `${item.title} - ${prefix} ${item.nextEp}`;
+            // Adicionamos a fonte da notificação para clareza
+            const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
             
             chrome.notifications.create(notifId, {
                 type: 'basic', 
-                iconUrl: '/icon.png', // Absolute path forces Chrome to start at the extension root
+                iconUrl: '/icon.png', 
                 title: I18nService.get('notifNew', lang),
                 message: message, 
                 priority: 2,
@@ -176,32 +194,24 @@ class ReleaseMonitorService {
                 ]
             });
 
-            notificationMeta[notifId] = item;
+            // Gravamos metadados expandidos
+            notificationMeta[notifId] = { ...item, monitorUrl: item.siteUrl };
         });
 
         const keys = Object.keys(notificationMeta);
         if (keys.length > 50) delete notificationMeta[keys[0]];
         await chrome.storage.local.set({ notificationMeta });
 
-        const historyItems = items.map(i => ({
-            title: i.title,
-            type: i.type,
-            id: i.id,
-            nextEp: i.nextEp,
-            url: monitorUrl
-        }));
-        await this.saveToHistory(historyItems);
+        await this.saveToHistory(items);
     }
 
     static async saveToHistory(items) {
         const timestamp = Date.now();
         const newEntries = items.map(item => {
-            if (typeof item === 'string') {
-                return { text: item, date: timestamp, read: false }; 
-            }
             return { 
                 text: `${item.title} - ${item.type === 'anime' ? 'Ep' : 'Ch'} ${item.nextEp}`, 
-                url: item.url,
+                url: item.siteUrl || item.url, // fallback legacy
+                siteName: item.siteName || 'Unknown Site',
                 id: item.id,
                 type: item.type,
                 date: timestamp, 

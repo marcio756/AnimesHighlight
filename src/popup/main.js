@@ -1,16 +1,17 @@
 /**
  * Main Controller for Popup
- * @description Orchestrates user settings, storage, I18n translations, and interactive UI states.
+ * @description Orchestrates user settings, storage, I18n translations, and Multi-Site logic.
  */
+import { I18nService } from '../common/i18n.js';
+import { PopupUI } from './ui.js';
+
 document.addEventListener('DOMContentLoaded', async () => {
-    // RESET BADGE ON OPEN (UX Best Practice)
     chrome.action.setBadgeText({ text: "" });
     chrome.storage.local.set({ unreadCount: 0 });
 
     let currentLang = await I18nService.getCurrentLang();
     I18nService.translateDOM(currentLang);
 
-    // Doms References - Theme & Tabs
     const themeToggleBtn = document.getElementById('themeToggleBtn');
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
@@ -23,16 +24,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const avatar = document.getElementById('avatar');
     const welcomeText = document.getElementById('welcomeText');
 
-    // Feature: Monitor
-    const inputUrl = document.getElementById('monitorUrl');
-    const checkEnabled = document.getElementById('monitorEnabled');
-    const saveMonitorBtn = document.getElementById('saveMonitorBtn');
+    // Feature: Monitor (Multi-Site)
+    const inputNewSiteUrl = document.getElementById('newSiteUrl');
+    const addSiteBtn = document.getElementById('addSiteBtn');
+    const monitoredSitesList = document.getElementById('monitoredSitesList');
+    const emptySitesState = document.getElementById('emptySitesState');
     const statusMonitor = document.getElementById('statusMonitor');
 
     // Feature: History
     const notifListEl = document.getElementById('notificationList');
     const emptyStateEl = document.getElementById('emptyState');
     const clearNotifsBtn = document.getElementById('clearNotifsBtn');
+    const historySiteFilter = document.getElementById('historySiteFilter');
 
     // Feature: Settings
     const langSelect = document.getElementById('langSelect');
@@ -43,19 +46,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
 
-    // Features: Colors
     const colorPickers = {
-        1: document.getElementById('color1'),
-        2: document.getElementById('color2'),
-        3: document.getElementById('color3'),
-        4: document.getElementById('color4'),
+        1: document.getElementById('color1'), 2: document.getElementById('color2'),
+        3: document.getElementById('color3'), 4: document.getElementById('color4'),
         6: document.getElementById('color6')
     };
+
+    let globalSites = [];
+    let globalLogs = [];
 
     // ==========================================
     // UI Interactions: Theme Toggle Logic
     // ==========================================
-    
     const updateThemeIcon = () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         themeToggleBtn.innerText = isDark ? '☀️' : '🌙';
@@ -65,21 +67,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     themeToggleBtn.addEventListener('click', () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
-        
         document.documentElement.setAttribute('data-theme', newTheme);
         updateThemeIcon();
         chrome.storage.local.set({ theme: newTheme });
-    });
-
-    // ==========================================
-    // UI Interactions: Accordions & Dynamic Rows
-    // ==========================================
-    
-    document.querySelectorAll('.settings-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const card = header.parentElement;
-            card.classList.toggle('collapsed');
-        });
     });
 
     const syncColorVisibility = () => {
@@ -89,74 +79,149 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (colorRow) colorRow.style.display = cb.checked ? 'flex' : 'none';
         });
     };
-
-    hlStatusCheckboxes.forEach(cb => {
-        cb.addEventListener('change', syncColorVisibility);
-    });
+    hlStatusCheckboxes.forEach(cb => cb.addEventListener('change', syncColorVisibility));
 
     // ==========================================
-    // Core Logic Initialization (Atualizado com Callback para o X)
+    // Core Multi-Site & History Logic
     // ==========================================
-
-    const loadNotifications = () => {
-        chrome.storage.local.get('notificationLog', (result) => {
-            PopupUI.renderNotifications(
-                result.notificationLog || [], 
-                notifListEl, 
-                emptyStateEl, 
-                clearNotifsBtn,
-                (updatedLogs) => {
-                    // Guarda o array atualizado e recarrega a vista na hora
-                    chrome.storage.local.set({ notificationLog: updatedLogs }, () => {
-                        loadNotifications(); 
-                    });
-                }
-            );
+    const saveSitesState = (triggerAlarmRefresh = true) => {
+        chrome.storage.local.set({ monitoredSites: globalSites }, () => {
+            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang);
+            if (triggerAlarmRefresh) chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
         });
     };
-    
-    const loadMonitorFeedback = () => {
-        PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
+
+    const siteActionCallbacks = {
+        onToggle: (id, isEnabled) => {
+            const site = globalSites.find(s => s.id === id);
+            if (site) { site.enabled = isEnabled; saveSitesState(); }
+        },
+        onDelete: (id) => {
+            globalSites = globalSites.filter(s => s.id !== id);
+            saveSitesState();
+        }
     };
 
-    PopupUI.initTabs(tabs, panes, loadNotifications, loadMonitorFeedback);
+    const renderLogs = () => {
+        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, historySiteFilter.value, (updatedLogs) => {
+            globalLogs = updatedLogs;
+            chrome.storage.local.set({ notificationLog: globalLogs }, () => renderLogs());
+        });
+    };
 
-    // Initial Storage Load
+    const loadCoreData = () => {
+        chrome.storage.local.get(['notificationLog', 'monitoredSites'], (result) => {
+            globalSites = result.monitoredSites || [];
+            globalLogs = result.notificationLog || [];
+            
+            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang);
+            renderLogs();
+            PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
+        });
+    };
+
+    PopupUI.initTabs(tabs, panes, loadCoreData, loadCoreData);
+
+    // Initial Storage Settings Load
     chrome.storage.local.get([
-        'malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled', 
-        'extensionLang', 'panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses', 'customColors'
+        'malUsername', 'malAvatar', 'extensionLang', 
+        'panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses', 'customColors'
     ], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
             if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea);
         }
-        if (res.monitorUrl) inputUrl.value = res.monitorUrl;
-        if (res.monitorEnabled !== undefined) {
-            checkEnabled.checked = res.monitorEnabled;
-            if (res.monitorEnabled) loadMonitorFeedback();
-        }
         if (res.extensionLang) langSelect.value = res.extensionLang;
-        
         if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
         if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
         if (res.savePanelPos !== undefined) checkSavePanelPos.checked = res.savePanelPos;
         
         if (res.highlightStatuses) {
-            hlStatusCheckboxes.forEach(cb => {
-                cb.checked = res.highlightStatuses.includes(parseInt(cb.value));
-            });
+            hlStatusCheckboxes.forEach(cb => cb.checked = res.highlightStatuses.includes(parseInt(cb.value)));
         }
-
         if (res.customColors) {
             Object.keys(colorPickers).forEach(id => {
                 if (res.customColors[id]) colorPickers[id].value = res.customColors[id];
             });
         }
-
         syncColorVisibility();
+        loadCoreData(); // Prime load
     });
 
-    // Profile Save Flow
+    // Add Site (Optimistic UI)
+    addSiteBtn.addEventListener('click', () => {
+        const urlRaw = inputNewSiteUrl.value.trim();
+        if (!urlRaw) return;
+
+        let formattedUrl;
+        try {
+            const urlObj = new URL(urlRaw.startsWith('http') ? urlRaw : `https://${urlRaw}`);
+            formattedUrl = urlObj.href;
+            const siteName = urlObj.hostname.replace('www.', '');
+
+            // Evitar duplicados
+            if (globalSites.some(s => s.url === formattedUrl)) {
+                PopupUI.updateStatus(statusMonitor, "Site already exists.", "error");
+                return;
+            }
+
+            // Optimistic Skeleton Push
+            globalSites.push({ id: 'temp', isSkeleton: true });
+            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+            inputNewSiteUrl.value = "";
+
+            setTimeout(() => {
+                globalSites = globalSites.filter(s => s.id !== 'temp');
+                globalSites.push({
+                    id: Date.now().toString(),
+                    url: formattedUrl,
+                    name: siteName,
+                    enabled: true
+                });
+                saveSitesState();
+            }, 500); // Progress Illusion (500ms delay)
+
+        } catch (e) {
+            PopupUI.updateStatus(statusMonitor, I18nService.get('statusErrorUrl', currentLang), "error");
+        }
+    });
+
+    inputNewSiteUrl.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn.click(); });
+    historySiteFilter.addEventListener('change', () => renderLogs());
+
+    // Settings Save Flow
+    saveSettingsBtn.addEventListener('click', () => {
+        const selectedLang = langSelect.value;
+        const pEnabled = checkPanelEnabled.checked;
+        const pTrans = checkPanelTrans.checked;
+        const sPos = checkSavePanelPos.checked;
+
+        const activeHighlights = Array.from(hlStatusCheckboxes).filter(cb => cb.checked).map(cb => parseInt(cb.value));
+        const activeColors = {
+            1: colorPickers[1].value, 2: colorPickers[2].value,
+            3: colorPickers[3].value, 4: colorPickers[4].value, 6: colorPickers[6].value
+        };
+
+        chrome.storage.local.set({ 
+            extensionLang: selectedLang, panelEnabled: pEnabled, panelTransparent: pTrans,
+            savePanelPos: sPos, highlightStatuses: activeHighlights, customColors: activeColors
+        }, () => {
+            currentLang = selectedLang;
+            I18nService.translateDOM(currentLang); 
+            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang); // Update translation on dropdown
+            PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
+        });
+    });
+
+    clearNotifsBtn.addEventListener('click', () => {
+        if(confirm(I18nService.get('confirmClear', currentLang))) {
+            globalLogs = [];
+            chrome.storage.local.set({ notificationLog: [] }, () => renderLogs());
+        }
+    });
+
     saveProfileBtn.addEventListener('click', async () => {
         const username = inputUser.value.trim();
         if (!username) return;
@@ -187,70 +252,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (error) {
             PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
             saveProfileBtn.disabled = false;
-        }
-    });
-
-    // Monitor Save Flow
-    saveMonitorBtn.addEventListener('click', () => {
-        const url = inputUrl.value.trim();
-        const enabled = checkEnabled.checked;
-        
-        const isValidUrl = (string) => { try { new URL(string); return true; } catch (_) { return false; } };
-
-        if (enabled && !isValidUrl(url)) {
-            PopupUI.updateStatus(statusMonitor, I18nService.get('statusErrorUrl', currentLang), "error");
-            return;
-        }
-
-        chrome.storage.local.set({ monitorUrl: url, monitorEnabled: enabled }, () => {
-            PopupUI.updateStatus(statusMonitor, I18nService.get('statusSaved', currentLang), "success");
-            chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
-            if (enabled) loadMonitorFeedback();
-        });
-    });
-
-    // Settings Save Flow
-    saveSettingsBtn.addEventListener('click', () => {
-        const selectedLang = langSelect.value;
-        const pEnabled = checkPanelEnabled.checked;
-        const pTrans = checkPanelTrans.checked;
-        const sPos = checkSavePanelPos.checked;
-
-        const activeHighlights = Array.from(hlStatusCheckboxes)
-                                    .filter(cb => cb.checked)
-                                    .map(cb => parseInt(cb.value));
-
-        const activeColors = {
-            1: colorPickers[1].value,
-            2: colorPickers[2].value,
-            3: colorPickers[3].value,
-            4: colorPickers[4].value,
-            6: colorPickers[6].value
-        };
-
-        chrome.storage.local.set({ 
-            extensionLang: selectedLang,
-            panelEnabled: pEnabled,
-            panelTransparent: pTrans,
-            savePanelPos: sPos,
-            highlightStatuses: activeHighlights,
-            customColors: activeColors
-        }, () => {
-            currentLang = selectedLang;
-            I18nService.translateDOM(currentLang); 
-            PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
-            
-            if (emptyStateEl.style.display === 'block') {
-                emptyStateEl.innerText = I18nService.get('emptyHistory', currentLang);
-            }
-        });
-    });
-
-    // Notifications Clear Flow
-    clearNotifsBtn.addEventListener('click', () => {
-        const msg = I18nService.get('confirmClear', currentLang);
-        if(confirm(msg)) {
-            chrome.storage.local.set({ notificationLog: [] }, () => loadNotifications());
         }
     });
 });

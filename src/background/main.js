@@ -5,10 +5,6 @@ import { ReleaseMonitorService, MONITOR_CONFIG } from './monitor.js';
 
 /**
  * Escutador de Rotas de Mensagens
- * @description Centraliza a receção das payloads tipadas do frontend.
- * @param {import('../content/utils.js').ExtensionMessage} request - A payload enviada pelo frontend.
- * @param {chrome.runtime.MessageSender} sender - O emissor.
- * @param {function(import('../content/utils.js').ExtensionResponse): void} sendResponse - Callback tipado de resposta.
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_MAL_LIST") {
@@ -56,19 +52,20 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.notifications.onClicked.addListener((notificationId) => {
-    chrome.storage.local.get('monitorUrl', (result) => {
-        if (result.monitorUrl) chrome.tabs.create({ url: result.monitorUrl });
+    chrome.storage.local.get(['notificationMeta'], (res) => {
+        const meta = res.notificationMeta && res.notificationMeta[notificationId];
+        if (meta && meta.monitorUrl) chrome.tabs.create({ url: meta.monitorUrl });
     });
     chrome.notifications.clear(notificationId);
 });
 
 chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-    chrome.storage.local.get(['notificationMeta', 'monitorUrl'], (res) => {
+    chrome.storage.local.get(['notificationMeta'], (res) => {
         const meta = res.notificationMeta && res.notificationMeta[notificationId];
         if (!meta) return;
 
         if (buttonIndex === 0) {
-            if (res.monitorUrl) chrome.tabs.create({ url: res.monitorUrl });
+            if (meta.monitorUrl) chrome.tabs.create({ url: meta.monitorUrl });
         } else if (buttonIndex === 1) {
             const field = meta.type === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
             MalService.updateListEntry(meta.id, meta.type, { [field]: meta.nextEp })
@@ -86,10 +83,31 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
 });
 
 chrome.runtime.onStartup.addListener(() => ReleaseMonitorService.setupAlarm());
+
 chrome.runtime.onInstalled.addListener((details) => {
-    ReleaseMonitorService.setupAlarm();
     chrome.storage.local.remove('seenEpisodes'); 
     
+    // Migração da estrutura v1.7 legacy (Single-site) para v2.0 (Multi-site Array)
+    chrome.storage.local.get(['monitorUrl', 'monitorEnabled', 'monitoredSites'], (res) => {
+        if (res.monitorUrl && !res.monitoredSites) {
+            try {
+                const urlObj = new URL(res.monitorUrl);
+                const defaultSite = {
+                    id: Date.now().toString(),
+                    url: res.monitorUrl,
+                    name: urlObj.hostname.replace('www.', ''),
+                    enabled: res.monitorEnabled !== false
+                };
+                chrome.storage.local.set({ monitoredSites: [defaultSite] }, () => {
+                    chrome.storage.local.remove(['monitorUrl', 'monitorEnabled']); // Cleanup
+                    ReleaseMonitorService.setupAlarm();
+                });
+            } catch(e) { ReleaseMonitorService.setupAlarm(); }
+        } else {
+            ReleaseMonitorService.setupAlarm();
+        }
+    });
+
     if (details.reason === 'install') {
         chrome.tabs.create({ url: 'src/welcome/welcome.html' });
     }

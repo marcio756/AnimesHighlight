@@ -16,14 +16,16 @@ const DICTIONARY = {
         lblUsername: "MyAnimeList Username:",
         btnVerifySave: "Verify & Save",
         
-        infoMonitor: "Checks the site every 15 minutes for new items you are currently watching or reading.",
-        lblMonitorUrl: "Site URL to Monitor:",
-        lblEnableMonitor: "Enable Background Monitoring",
-        btnSaveSettings: "Save Settings",
+        infoMonitor: "Checks your active sites every 15 minutes for new items.",
+        lblAddSite: "Add Site to Monitor:",
+        placeholderSiteUrl: "https://example.com/latest",
+        btnAddSite: "Add Site",
+        siteListEmpty: "No sites added yet. Add a URL above to start monitoring.",
         
         emptyHistory: "No new releases detected yet.",
         btnClearHistory: "Clear History",
         confirmClear: "Clear all history?",
+        filterAllSites: "All Sites",
         
         lblLanguage: "Extension Language:",
         langEn: "English",
@@ -41,6 +43,7 @@ const DICTIONARY = {
         lblNotScheduled: "Monitoring disabled.",
         
         statusChecking: "Checking...",
+        statusCheckingMultiple: "Checking multiple sites...",
         statusNotInList: "NOT IN LIST",
         statusAddToList: "Add to List...",
         statusSaved: "Saved successfully!",
@@ -85,14 +88,16 @@ const DICTIONARY = {
         lblUsername: "Nome de Utilizador (MyAnimeList):",
         btnVerifySave: "Verificar e Guardar",
         
-        infoMonitor: "Verifica o site a cada 15 minutos por novos itens que estás a acompanhar.",
-        lblMonitorUrl: "URL do Site a Monitorizar:",
-        lblEnableMonitor: "Ativar Monitorização em Segundo Plano",
-        btnSaveSettings: "Guardar Definições",
+        infoMonitor: "Verifica os teus sites ativos a cada 15 minutos por novidades.",
+        lblAddSite: "Adicionar Site a Monitorizar:",
+        placeholderSiteUrl: "https://exemplo.com/lancamentos",
+        btnAddSite: "Adicionar Site",
+        siteListEmpty: "Nenhum site adicionado. Adiciona um URL acima para começar.",
         
         emptyHistory: "Ainda não foram detetados novos lançamentos.",
         btnClearHistory: "Limpar Histórico",
         confirmClear: "Apagar todo o histórico?",
+        filterAllSites: "Todos os Sites",
         
         lblLanguage: "Idioma da Extensão:",
         langEn: "English",
@@ -110,6 +115,7 @@ const DICTIONARY = {
         lblNotScheduled: "Monitorização desativada.",
         
         statusChecking: "A verificar...",
+        statusCheckingMultiple: "A verificar múltiplos sites...",
         statusNotInList: "NÃO ESTÁ NA LISTA",
         statusAddToList: "Adicionar à Lista...",
         statusSaved: "Guardado com sucesso!",
@@ -146,7 +152,7 @@ const DICTIONARY = {
     }
 };
 
-class I18nService {
+export class I18nService {
     static async getCurrentLang() {
         return new Promise((resolve) => {
             chrome.storage.local.get(['extensionLang'], (res) => {

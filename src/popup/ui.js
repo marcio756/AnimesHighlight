@@ -1,8 +1,10 @@
 /**
  * Popup UI Manager
- * @description Handles all visual updates, tab switching, and data rendering for the extension popup.
+ * @description Handles all visual updates, dynamic DOM generation, and Optimistic UI rendering.
  */
-class PopupUI {
+import { I18nService } from '../common/i18n.js';
+
+export class PopupUI {
     static clockInterval = null;
 
     static initTabs(tabs, panes, onHistoryLoad, onMonitorLoad) {
@@ -69,13 +71,85 @@ class PopupUI {
     }
 
     /**
-     * Atualizado com botão X e Callback 'onUpdateLogs' para fechar ao clicar em Abrir/X
+     * Gera os cartões dos sites monitorizados (Optimistic UI)
      */
-    static renderNotifications(logs, listEl, emptyEl, clearBtn, onUpdateLogs) {
+    static renderSitesList(sites, listEl, emptyEl, callbacks) {
+        listEl.innerHTML = "";
+        
+        if (!sites || sites.length === 0) {
+            emptyEl.style.display = 'block';
+            return;
+        }
+
+        emptyEl.style.display = 'none';
+
+        sites.forEach((site, index) => {
+            if (site.isSkeleton) {
+                listEl.innerHTML += `
+                    <li class="skeleton-card">
+                        <div style="width: 60%;"><div class="skeleton-box skeleton-title"></div><div class="skeleton-box skeleton-subtitle"></div></div>
+                        <div class="skeleton-box skeleton-toggle"></div>
+                    </li>`;
+                return;
+            }
+
+            const li = document.createElement('li');
+            li.className = `site-card ${site.enabled ? '' : 'disabled'}`;
+            li.innerHTML = `
+                <div class="site-info" title="${site.url}">
+                    <span class="site-name">${site.name}</span>
+                    <span class="site-url">${site.url}</span>
+                </div>
+                <div class="site-actions">
+                    <label class="switch" style="transform: scale(0.8); margin: 0;">
+                        <input type="checkbox" class="toggle-site" data-id="${site.id}" ${site.enabled ? 'checked' : ''}>
+                        <span class="slider round"></span>
+                    </label>
+                    <button class="btn-icon delete-site" data-id="${site.id}" title="Remove Site">🗑️</button>
+                </div>
+            `;
+            listEl.appendChild(li);
+        });
+
+        // Eventos
+        listEl.querySelectorAll('.toggle-site').forEach(btn => {
+            btn.addEventListener('change', (e) => callbacks.onToggle(e.target.dataset.id, e.target.checked));
+        });
+        listEl.querySelectorAll('.delete-site').forEach(btn => {
+            btn.addEventListener('click', (e) => callbacks.onDelete(e.target.dataset.id));
+        });
+    }
+
+    /**
+     * Preenche o dropdown do Histórico dinamicamente com os sites.
+     */
+    static updateSiteFilterDropdown(sites, selectEl, currentLang) {
+        if (!selectEl) return;
+        const currentVal = selectEl.value;
+        selectEl.innerHTML = `<option value="all">${I18nService.get('filterAllSites', currentLang)}</option>`;
+        
+        if (sites) {
+            sites.forEach(site => {
+                const opt = document.createElement('option');
+                opt.value = site.name;
+                opt.innerText = site.name;
+                selectEl.appendChild(opt);
+            });
+        }
+        
+        // Restore value if it still exists
+        if (Array.from(selectEl.options).some(o => o.value === currentVal)) {
+            selectEl.value = currentVal;
+        }
+    }
+
+    static renderNotifications(logs, listEl, emptyEl, clearBtn, filterValue, onUpdateLogs) {
         if (!listEl) return;
         listEl.innerHTML = "";
 
-        if (!logs || logs.length === 0) {
+        const filteredLogs = filterValue === 'all' ? logs : logs.filter(l => l.siteName === filterValue);
+
+        if (!filteredLogs || filteredLogs.length === 0) {
             emptyEl.style.display = 'block';
             clearBtn.style.display = 'none';
             return;
@@ -84,21 +158,26 @@ class PopupUI {
         emptyEl.style.display = 'none';
         clearBtn.style.display = 'block';
 
-        logs.forEach((log, index) => {
+        filteredLogs.forEach((log) => {
+            const originalIndex = logs.indexOf(log); // Para deleção na array original
             const li = document.createElement('li');
             const date = new Date(log.date).toLocaleString();
             const actionUrl = log.url || `https://myanimelist.net/${log.type || 'anime'}/${log.id || ''}`;
+            const siteTag = log.siteName ? `<span class="notif-tag">${log.siteName}</span>` : '';
             
             li.innerHTML = `
                 <div class="notif-item" style="position: relative; padding-right: 20px;">
-                    <button class="delete-notif-btn" data-index="${index}" style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #a12f31; font-size: 16px; cursor: pointer; line-height: 1; padding: 0;" title="Remover notificação">&times;</button>
+                    <button class="delete-notif-btn" data-index="${originalIndex}" style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #a12f31; font-size: 16px; cursor: pointer; line-height: 1; padding: 0;" title="Remover notificação">&times;</button>
                     
                     <div style="display: flex; flex-direction: column; gap: 8px;">
                         <span class="notif-text" style="font-size: 13px; font-weight: 600; color: var(--text-main); padding-right: 15px;">${log.text}</span>
                         
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span class="notif-date" style="font-size: 10px; color: var(--text-muted);">${date}</span>
-                            <a href="${actionUrl}" target="_blank" class="open-notif-btn" data-index="${index}" style="background-color: #2db039; color: white; padding: 4px 12px; border-radius: 4px; font-size: 11px; text-decoration: none; font-weight: bold; box-shadow: 0 2px 4px rgba(45, 176, 57, 0.2);">Abrir</a>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <span class="notif-date" style="font-size: 10px; color: var(--text-muted);">${date}</span>
+                                ${siteTag}
+                            </div>
+                            <a href="${actionUrl}" target="_blank" class="open-notif-btn" data-index="${originalIndex}" style="background-color: #2db039; color: white; padding: 4px 12px; border-radius: 4px; font-size: 11px; text-decoration: none; font-weight: bold; box-shadow: 0 2px 4px rgba(45, 176, 57, 0.2);">Abrir</a>
                         </div>
                     </div>
                 </div>
@@ -106,51 +185,14 @@ class PopupUI {
             listEl.appendChild(li);
         });
 
-        // Eventos de Deleção (Remover)
-        listEl.querySelectorAll('.delete-notif-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const idx = parseInt(e.target.getAttribute('data-index'));
-                logs.splice(idx, 1);
-                if (onUpdateLogs) onUpdateLogs(logs);
-            });
-        });
+        // Eventos Deleção / Abertura
+        const handleRemove = (e) => {
+            const idx = parseInt(e.target.getAttribute('data-index'));
+            logs.splice(idx, 1);
+            if (onUpdateLogs) onUpdateLogs(logs);
+        };
 
-        // Eventos ao Abrir (Remover também)
-        listEl.querySelectorAll('.open-notif-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const idx = parseInt(e.target.getAttribute('data-index'));
-                logs.splice(idx, 1);
-                if (onUpdateLogs) onUpdateLogs(logs);
-            });
-        });
-    }
-
-    static async updateMalProgress(id, newValue, isAnime) {
-        if (newValue < 0) return;
-        const field = isAnime ? 'num_watched_episodes' : 'num_chapters_read';
-        
-        chrome.runtime.sendMessage({
-            action: "UPDATE_PROGRESS",
-            id: id,
-            mediaType: isAnime ? 'anime' : 'manga',
-            data: { [field]: newValue }
-        }, (response) => {
-            if (response && response.success) {
-                location.reload(); 
-            }
-        });
-    }
-
-    static async updateMalStatus(id, newStatus, isAnime) {
-        chrome.runtime.sendMessage({
-            action: "UPDATE_PROGRESS",
-            id: id,
-            mediaType: isAnime ? 'anime' : 'manga',
-            data: { status: newStatus }
-        }, (response) => {
-            if (response && response.success) {
-                location.reload();
-            }
-        });
+        listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
+        listEl.querySelectorAll('.open-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
     }
 }

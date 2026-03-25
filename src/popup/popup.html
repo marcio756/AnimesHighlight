@@ -36,25 +36,30 @@
 
         <div id="tab-monitor" class="tab-pane">
             <div class="monitor-info" data-i18n="infoMonitor"></div>
-            <div class="input-group">
-                <label data-i18n="lblMonitorUrl">Site URL to Monitor:</label>
-                <input type="text" id="monitorUrl" placeholder="https://example.com/latest">
-            </div>
-            <div class="modern-toggle-row">
-                <span data-i18n="lblEnableMonitor">Enable Background Monitoring</span>
-                <label class="switch">
-                    <input type="checkbox" id="monitorEnabled">
-                    <span class="slider round"></span>
-                </label>
+            
+            <div class="input-group" style="display: flex; gap: 8px; margin-bottom: 20px;">
+                <div style="flex: 1;">
+                    <label data-i18n="lblAddSite">Add Site to Monitor:</label>
+                    <input type="text" id="newSiteUrl" data-i18n-placeholder="placeholderSiteUrl" placeholder="https://example.com/latest">
+                </div>
+                <button id="addSiteBtn" class="action-btn" style="width: auto; align-self: flex-end; padding: 10px 15px;" data-i18n="btnAddSite">Add</button>
             </div>
             
+            <ul id="monitoredSitesList" class="site-list">
+                </ul>
+            <div id="emptySitesState" class="empty-state" style="display:none;" data-i18n="siteListEmpty"></div>
+            
             <div id="nextCheckDisplay" class="next-check-text"></div>
-
-            <button id="saveMonitorBtn" class="action-btn" data-i18n="btnSaveSettings">Save Settings</button>
             <div id="statusMonitor" class="status"></div>
         </div>
 
         <div id="tab-notifications" class="tab-pane">
+            <div class="filter-row" style="margin-bottom: 12px;">
+                <select id="historySiteFilter" class="modern-select">
+                    <option value="all" data-i18n="filterAllSites">All Sites</option>
+                    </select>
+            </div>
+
             <div id="notifContainer">
                 <ul id="notificationList" class="notif-list"></ul>
                 <div id="emptyState" class="empty-state" style="display:none;" data-i18n="emptyHistory"></div>
@@ -167,10 +172,10 @@
         </div>
     </div>
     
-    <div class="footer">Universal Version 1.7</div>
+    <div class="footer">Universal Version 2.0</div>
     
-    <script src="../common/i18n.js"></script>
-    <script src="ui.js"></script>
-    <script src="main.js"></script>
+    <script type="module" src="../common/i18n.js"></script>
+    <script type="module" src="ui.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>

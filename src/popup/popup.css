@@ -298,3 +298,52 @@ input:focus + .slider { box-shadow: 0 0 1px #2db039; }
 input:checked + .slider:before { transform: translateX(16px); }
 .slider.round { border-radius: 20px; }
 .slider.round:before { border-radius: 50%; }
+
+/* ==========================================================
+   MULTI-SITE MONITOR UI 
+   ========================================================== */
+.site-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
+.site-list::-webkit-scrollbar { width: 6px; }
+.site-list::-webkit-scrollbar-track { background: var(--bg-main); border-radius: 4px; }
+.site-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+
+.site-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px var(--shadow-color);
+}
+.site-card:hover { border-color: var(--primary-color); transform: translateY(-1px); box-shadow: 0 4px 8px var(--shadow-color); }
+.site-card.disabled { opacity: 0.6; filter: grayscale(1); }
+
+.site-info { display: flex; flex-direction: column; gap: 2px; overflow: hidden; width: 65%; }
+.site-name { font-weight: 600; font-size: 13px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.site-url { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.site-actions { display: flex; align-items: center; gap: 8px; }
+
+.btn-icon {
+    background: transparent; border: none; font-size: 16px; cursor: pointer; color: var(--text-muted);
+    transition: color 0.2s, transform 0.2s; padding: 4px; display: flex; align-items: center; justify-content: center;
+}
+.btn-icon:hover { color: #a12f31; transform: scale(1.1); }
+
+/* Skeleton Loader Animation */
+.skeleton-card {
+    background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px;
+    padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.skeleton-box { height: 12px; background: linear-gradient(90deg, var(--border-color) 25%, var(--hover-bg) 50%, var(--border-color) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; }
+.skeleton-title { width: 60%; margin-bottom: 6px; }
+.skeleton-subtitle { width: 40%; height: 8px; }
+.skeleton-toggle { width: 36px; height: 20px; border-radius: 20px; }
+
+@keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* Tagging UI in History */
+.notif-tag { background: var(--bg-main); color: var(--primary-color); padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; border: 1px solid var(--border-color); }
