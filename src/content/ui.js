@@ -14,10 +14,6 @@ class UIManager {
         this.currentLanguage = await I18nService.getCurrentLang();
     }
 
-    /**
-     * Initializes custom CSS variables for user-defined themes.
-     * Prevents heavy style injections by updating the root properties.
-     */
     static async initTheming() {
         const res = await chrome.storage.local.get(['customColors']);
         if (res.customColors) {
@@ -26,7 +22,7 @@ class UIManager {
             if (res.customColors[2]) root.style.setProperty('--mal-color-2', res.customColors[2]);
             if (res.customColors[3]) root.style.setProperty('--mal-color-3', res.customColors[3]);
             if (res.customColors[4]) root.style.setProperty('--mal-color-4', res.customColors[4]);
-            if (res.customColors[6]) root.style.setProperty('--mal-color-6', res.customColors[6]);
+            if (res.customColors[5]) root.style.setProperty('--mal-color-6', res.customColors[5]);
         }
     }
 
@@ -38,9 +34,6 @@ class UIManager {
         this.savePanelPosition = savePos;
     }
 
-    /**
-     * Applies visuals with context-aware labels (Watch vs Read).
-     */
     static applyVisuals(element, statusId, mediaType) {
         if (element.classList.contains('mal-item-highlight')) return;
         const styleInfo = STATUS_MAP[statusId];
@@ -66,10 +59,13 @@ class UIManager {
             const hasImg = current.querySelector('img') || 
                            current.querySelector('.cover, .poster, .thumb, .contentImg') ||
                            (current.style.backgroundImage && current.style.backgroundImage !== 'none');
-            const isCardTag = ['ARTICLE', 'LI', 'DIV'].includes(current.tagName);
+            
+            const isCardTag = ['DIV', 'ARTICLE', 'LI', 'A', 'SECTION', 'UL'].includes(current.tagName);
             const hasCardClass = current.className.includes('item') || current.className.includes('card') || current.className.includes('poster');
+            
+            // Verificação isolada: omitimos current.offsetWidth para não causar Layout Thrashing e forçar Reflow
             if ((hasImg || (isCardTag && hasCardClass)) && current.tagName !== 'BODY') {
-                if (current.offsetWidth < window.innerWidth * 0.95) return current;
+                return current;
             }
             current = current.parentElement;
             attempts++;
@@ -83,12 +79,10 @@ class UIManager {
         panel.id = 'malControlPanel';
         panel.className = 'mal-control-panel';
 
-        // 1. Vai buscar o tema inicial da storage
         chrome.storage.local.get(['theme'], (res) => {
             panel.setAttribute('data-theme', res.theme || 'light');
         });
 
-        // 2. Escuta mudanças em tempo real se o utilizador clicar no popup
         chrome.storage.onChanged.addListener((changes, area) => {
             if (area === 'local' && changes.theme) {
                 const p = document.getElementById('malControlPanel');
@@ -96,8 +90,6 @@ class UIManager {
             }
         });
 
-        // NOTA: As cores estáticas do fundo (#2a2a2a) e do texto (#ddd) foram
-        // substituídas por variáveis CSS para garantirem legibilidade dinâmica.
         panel.innerHTML = `
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px;">
@@ -120,10 +112,6 @@ class UIManager {
         DraggableService.init(panel, header, this.savePanelPosition);
     }
 
-    /**
-     * Renders the panel specifically for items that returned 0 results from the Jikan API.
-     * @param {string} itemName - The title that was searched.
-     */
     static async showNotFoundPanel(itemName) {
         await this.createPanel();
         const panel = document.getElementById('malControlPanel');

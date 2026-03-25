@@ -8,23 +8,21 @@
 class MalController {
     constructor() {
         this.globalMediaMap = new Map();
-        this.observer = null;
-        this.debounceTimer = null;
+        this.mutationObserver = null;
+        this.intersectionObserver = null;
+        this.dynamicDebouncer = null;
         this.isSearching = false;
         this.isPanelEnabled = true; 
-        this.activeHighlights = [1, 2, 3, 4, 6]; 
+        this.activeHighlights = [1, 2, 3, 4, 5]; 
     }
 
-    /**
-     * Bootstraps the highlighter logic. Retrieves user preferences before starting.
-     */
     async init() {
         if (!PerformanceGuard.isRelevantPage()) return;
         
         try {
             await SynonymDictionary.init(); 
             
-            const settings = await chrome.storage.local.get(['panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses']);
+            const settings = await chrome.storage.local.get();
             this.isPanelEnabled = settings.panelEnabled !== false; 
             
             if (settings.highlightStatuses) {
@@ -35,7 +33,7 @@ class MalController {
             UIManager.setSavePosition(settings.savePanelPos === true);
 
             await UIManager.initLanguage();
-            await UIManager.initTheming(); // NOVO: Injeta as cores personalizadas do utilizador
+            await UIManager.initTheming(); 
 
             this.globalMediaMap = await DataManager.getUserList();
             this.startObserver();
@@ -44,9 +42,6 @@ class MalController {
         }
     }
 
-    /**
-     * Queries the Jikan API as a fallback when an item appears to be the main focus but is not in the local map.
-     */
     searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled) return; 
         if (this.isSearching) return;
@@ -72,7 +67,6 @@ class MalController {
             let finalType = null;
 
             if (response && response.success && response.results) {
-                // 1. Try to find a match in the local list first
                 for (const apiItem of response.results) {
                     if (apiItem.type !== currentMediaType) continue;
 
@@ -84,19 +78,17 @@ class MalController {
                             finalStatus = foundInList.status;
                             finalType = foundInList.type;
                             
-                            // Self-learning synonym logic
                             if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
                                 SynonymDictionary.save(cleanQuery, localTitle);
                             }
                             
-                            setTimeout(() => this.processPage(), 200);
+                            setTimeout(() => this.startObserver(), 200);
                             break;
                         }
                     }
                     if (bestMatch) break; 
                 }
 
-                // 2. Fallback: Validate Jikan results instead of blindly trusting them
                 if (!bestMatch) {
                     for (const apiItem of response.results) {
                         if (apiItem.type !== currentMediaType) continue;
@@ -104,7 +96,6 @@ class MalController {
                         const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
                         const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
                         
-                        // We check if the returned API title actually matches our extracted slug
                         if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
                            (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm))) {
                             bestMatch = apiItem;
@@ -115,7 +106,6 @@ class MalController {
                 }
             }
 
-            // 3. Handle Empty Results (Not Found on MAL or Rejected by FuzzyMatch)
             if (!bestMatch) {
                 UIManager.showNotFoundPanel(cleanQuery);
                 return;
@@ -125,103 +115,127 @@ class MalController {
         });
     }
 
-    /**
-     * Analyzes the DOM to orchestrate highlighting and panel triggering.
-     */
-    processPage() {
-        const isListingPage = ContextAnalyzer.isListingPage();
-        const currentMediaType = ContextAnalyzer.guessContentType();
+    startObserver() {
+        if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
         
-        let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
+        // Setup IntersectionObserver for visibility-driven heavy processing
+        const options = {
+            root: null,
+            rootMargin: "250px 0px 250px 0px", // Pre-calculate slightly before visual entry to avoid pop-in
+            threshold: 0
+        };
+
+        this.intersectionObserver = new IntersectionObserver((entries, observer) => {
+            const isListingPage = ContextAnalyzer.isListingPage();
+            const currentMediaType = ContextAnalyzer.guessContentType();
+            let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
+
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Execute heavy logic only when the specific node enters viewport proximity
+                    this.processElement(entry.target, isListingPage, currentMediaType, panelVisible);
+                    observer.unobserve(entry.target); // Sever visual binding to prevent cyclic re-processing
+                }
+            });
+        }, options);
+
+        // Setup Dynamic Debouncer for performance throttling
+        this.dynamicDebouncer = new DynamicDebouncer(() => {
+            const currentMediaType = ContextAnalyzer.guessContentType();
+            let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
+            this.analyzeUrlForPanel(currentMediaType, panelVisible);
+        });
+
+        // Setup MutationObserver solely for delegating new nodes to IntersectionObserver
+        this.mutationObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) { 
+                        this.observeNewElements(node);
+                    }
+                });
+            });
+            this.dynamicDebouncer.trigger();
+        });
         
-        let foundMainItem = this.scanDomElements(isListingPage, currentMediaType, panelVisible);
-
-        if (this.isPanelEnabled && !foundMainItem) {
-            foundMainItem = this.analyzeUrlForPanel(currentMediaType, panelVisible);
-        }
-
-        if (!foundMainItem) {
-            setTimeout(() => { if (!foundMainItem) UIManager.hidePanel(); }, 500);
-        }
+        this.mutationObserver.observe(document.body, { childList: true, subtree: true });
+        
+        // Initial page scan delegation
+        this.observeNewElements(document.body);
+        this.dynamicDebouncer.trigger();
     }
 
-    /**
-     * Scans DOM candidates, applying borders and potentially triggering the info panel ONLY if strictly matched.
-     */
-    scanDomElements(isListingPage, currentMediaType, panelVisible) {
+    observeNewElements(rootNode) {
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
-        const candidates = document.querySelectorAll(selector);
         
-        let foundMainItem = panelVisible;
-        let processedCount = 0;
-        const PROCESS_LIMIT = 500; 
-        const pathName = window.location.pathname;
+        if (rootNode.matches && rootNode.matches(selector)) {
+             this.intersectionObserver.observe(rootNode);
+        }
+        
+        if (rootNode.querySelectorAll) {
+            const candidates = rootNode.querySelectorAll(selector);
+            candidates.forEach(el => this.intersectionObserver.observe(el));
+        }
+    }
 
-        for (const element of candidates) {
-            if (processedCount > PROCESS_LIMIT) break;
-            if (element.closest('[data-mal-status]')) continue;
-            if (element.offsetParent === null) continue; 
-            
-            const text = element.innerText || "";
-            if (text.length < 3) continue;
-            
-            const lowerText = text.toLowerCase();
-            if (UI_BLOCKLIST.some(term => lowerText.includes(term))) continue;
+    processElement(element, isListingPage, currentMediaType, panelVisible) {
+        if (element.closest('[data-mal-status]')) return;
+        if (element.offsetParent === null) return; 
+        
+        const text = element.innerText || "";
+        if (text.length < 3) return;
+        
+        const lowerText = text.toLowerCase();
+        if (UI_BLOCKLIST.some(term => lowerText.includes(term))) return;
 
-            const itemTitleRaw = TextNormalizer.normalize(text);
-            if (!itemTitleRaw || itemTitleRaw.length < 3) continue;
+        const itemTitleRaw = TextNormalizer.normalize(text);
+        if (!itemTitleRaw || itemTitleRaw.length < 3) return;
 
-            const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
-            processedCount++;
+        const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
 
-            let matchArray = null;
-            if (this.globalMediaMap.has(itemTitle)) {
-                matchArray = this.globalMediaMap.get(itemTitle);
-            } else {
-                if (itemTitle.length < 150) {
-                    for (let [malTitle, dataArray] of this.globalMediaMap) {
-                        if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
-                            matchArray = dataArray;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            let match = null;
-            if (matchArray && matchArray.length > 0) {
-                match = matchArray.find(m => m.type === currentMediaType);
-            }
-
-            if (match) {
-                const card = UIManager.findCardContainer(element);
-                if (card && this.activeHighlights.includes(match.status)) {
-                    UIManager.applyVisuals(card, match.status, match.type);
-                }
-            }
-
-            if (this.isPanelEnabled && !foundMainItem) {
-                const tag = element.tagName;
-                const isHead1 = tag === 'H1'; 
-                const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
-                const titleClean = itemTitle.replace(/\s/g, "");
-                
-                const isInUrl = urlPath.includes(titleClean.replace(/-/g, "")) && titleClean.length > 5;
-                
-                if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
-                    if (match && !panelVisible) {
-                        UIManager.showPanel(match.rawTitle || text, match);
-                        foundMainItem = true;
+        let matchArray = null;
+        if (this.globalMediaMap.has(itemTitle)) {
+            matchArray = this.globalMediaMap.get(itemTitle);
+        } else {
+            if (itemTitle.length < 150) {
+                for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
+                    if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
+                        matchArray = dataArray;
+                        break;
                     }
                 }
             }
         }
-        return foundMainItem;
+
+        let match = null;
+        if (matchArray && matchArray.length > 0) {
+            match = matchArray.find(m => m.type === currentMediaType);
+        }
+
+        if (match) {
+            const card = UIManager.findCardContainer(element);
+            if (card && this.activeHighlights.includes(match.status)) {
+                UIManager.applyVisuals(card, match.status, match.type);
+            }
+        }
+
+        if (this.isPanelEnabled) {
+            const tag = element.tagName;
+            const isHead1 = tag === 'H1'; 
+            const pathName = window.location.pathname;
+            const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
+            const titleClean = itemTitle.replace(/\s/g, "");
+            
+            const isInUrl = urlPath.includes(titleClean.replace(/-/g, "")) && titleClean.length > 5;
+            
+            if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
+                if (match && !document.getElementById('malControlPanel')?.classList.contains('visible')) {
+                    UIManager.showPanel(match.rawTitle || text, match);
+                }
+            }
+        }
     }
 
-    /**
-     * Checks if the URL slug corresponds to an anime/manga to force-open the panel.
-     */
     analyzeUrlForPanel(currentMediaType, panelVisible) {
         const urlTitle = TextNormalizer.getSlugFromUrl();
         if (!urlTitle || urlTitle.length <= 3) return false;
@@ -233,7 +247,7 @@ class MalController {
         let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
         
         if (!matchArray) {
-            for (let [malTitle, dataArray] of this.globalMediaMap) {
+            for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
                 if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
                     matchArray = dataArray;
                     break;
@@ -255,23 +269,6 @@ class MalController {
         }
 
         return false;
-    }
-
-    /**
-     * Initializes the MutationObserver to handle dynamically loaded content.
-     */
-    startObserver() {
-        if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
-        
-        this.processPage();
-
-        if (this.observer) this.observer.disconnect();
-        this.observer = new MutationObserver((mutations) => {
-            if (this.debounceTimer) clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(() => { this.processPage(); }, CONFIG.DEBOUNCE_DELAY);
-        });
-        
-        this.observer.observe(document.body, { childList: true, subtree: true });
     }
 }
 

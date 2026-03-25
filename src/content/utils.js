@@ -2,14 +2,17 @@
 
 /**
  * Utility Service Layer
- * @description Centralizes pure logic, heuristics, and configuration constants.
- * Cleaned of hardcoded site names to ensure universal applicability.
+ * @description Centralizes pure logic, heuristics, dynamic performance controls, and configuration constants.
  */
 
 const CONFIG = {
     CACHE_KEY: 'mal_v35_full_list', 
     CACHE_DURATION: 1000 * 60 * 15, 
-    DEBOUNCE_DELAY: 500,
+    DEBOUNCE_DELAY: 500, 
+    MIN_DEBOUNCE_DELAY: 100,
+    MAX_DEBOUNCE_DELAY: 1200,
+    SAFE_EXECUTION_BUDGET: 20,
+    STRESS_MULTIPLIER: 5.0,
     SITE_KEYWORDS: [
         'anime', 'manga', 'donghua', 'episodio', 'episode', 'season', 
         'temporada', 'assistir', 'online', 'legendado', 'dublado', 'stream',
@@ -35,10 +38,34 @@ const STATUS_MAP = {
     6: { class: 'mal-plan', labelKey: 'statusPlanned', color: '#787878' }
 };
 
+class DynamicDebouncer {
+    constructor(callback) {
+        this.callback = callback;
+        this.timer = null;
+        this.currentDelay = CONFIG.MIN_DEBOUNCE_DELAY;
+    }
+
+    trigger(...args) {
+        if (this.timer) clearTimeout(this.timer);
+        
+        this.timer = setTimeout(() => {
+            const start = performance.now();
+            this.callback(...args);
+            const end = performance.now();
+            const duration = end - start;
+            
+            // Increment logic delay if execution exceeds safe frame budget, freeing UI thread
+            if (duration > CONFIG.SAFE_EXECUTION_BUDGET) {
+                const excess = duration - CONFIG.SAFE_EXECUTION_BUDGET;
+                this.currentDelay = Math.min(CONFIG.MAX_DEBOUNCE_DELAY, this.currentDelay + (excess * CONFIG.STRESS_MULTIPLIER));
+            } else {
+                this.currentDelay = Math.max(CONFIG.MIN_DEBOUNCE_DELAY, this.currentDelay * 0.9);
+            }
+        }, this.currentDelay);
+    }
+}
+
 class PerformanceGuard {
-    /**
-     * Determines if the script should run based on URL and page content metadata.
-     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -56,13 +83,9 @@ class PerformanceGuard {
 }
 
 class ContextAnalyzer {
-    /**
-     * Determines the most likely media type (anime/manga) based on URL and DOM heuristics.
-     */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
         
-        // Priority 1: Specific URL Keywords
         const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon', 'ler', 'capitulo'];
         const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'assistir', 'season', 'ova'];
         
@@ -82,13 +105,11 @@ class ContextAnalyzer {
         const chapterCount = (bodyText.match(/\b(chapter|capitulo|capítulo|scan|read|ler|manhwa|manhua)\b/g) || []).length;
         const episodeCount = (bodyText.match(/\b(episode|episodio|episódio|ep|watch|assistir|temporada|stream)\b/g) || []).length;
 
-        // Priority 2: Predominant counts for ambiguous homepages
         if (isHomePage) {
             if (chapterCount > episodeCount) return 'manga';
             if (episodeCount > chapterCount) return 'anime';
         }
 
-        // Priority 3: Meta metadata and Title
         const title = document.title.toLowerCase();
         const metaDesc = document.querySelector('meta[name="description"]')?.content.toLowerCase() || "";
         
@@ -108,14 +129,11 @@ class ContextAnalyzer {
         return (pageMangaScore > pageAnimeScore) ? 'manga' : 'anime';
     }
 
-    /**
-     * Identifies if the current page is a directory (listing multiple series) or a specific item.
-     */
     static isListingPage() {
         const pathName = window.location.pathname.toLowerCase();
         const segments = pathName.split('/').filter(p => p.length > 0);
         
-        if (segments.length === 0) return true; // Home
+        if (segments.length === 0) return true; 
         
         const genericDirectories = [
             'episodios', 'episodio', 'lancamentos', 'animes', 'anime',
@@ -130,16 +148,12 @@ class ContextAnalyzer {
 }
 
 class TextNormalizer {
-    /**
-     * Cleans and normalizes strings for fuzzy matching, removing release noise.
-     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
         let clean = String(str).toLowerCase();
         clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
         
-        // Strip episode/chapter numbering from the string
         clean = clean.replace(/\b(episodio|episode|ep|e|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
         clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1"); 
         clean = clean.replace(/\s+-\s+/g, " "); 
@@ -154,24 +168,19 @@ class TextNormalizer {
         return clean.trim();
     }
 
-    /**
-     * Extracts the series title slug from the URL robustly, ignoring generic directories and episode markers.
-     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
         if (segments.length === 0) return null;
         
-        // Generic directory paths that are NOT the title
         const generics = ['anime', 'animes', 'manga', 'mangas', 'watch', 'read', 'ler', 'assistir', 'serie', 'series', 'tv', 'movie', 'filme', 'ova', 'category', 'genre'];
 
-        // Traverse backwards to find the actual media title slug
         for (let i = segments.length - 1; i >= 0; i--) {
             const seg = segments[i].toLowerCase();
             
             if (generics.includes(seg)) continue;
-            if (/^\d+$/.test(seg)) continue; // Skip pure numeric IDs
-            if (/^(capitulo|capítulo|cap|chapter|ch|episodio|episódio|ep|episode)[\s\-]?\d+/i.test(seg)) continue; // Skip chapter/ep segments
+            if (/^\d+$/.test(seg)) continue; 
+            if (/^(capitulo|capítulo|cap|chapter|ch|episodio|episódio|ep|episode)[\s\-]?\d+/i.test(seg)) continue;
             if (/^page\d+/.test(seg)) continue;
 
             return seg.replace(/[\-_]/g, ' ').trim();
@@ -182,9 +191,6 @@ class TextNormalizer {
 }
 
 class Matcher {
-    /**
-     * Core fuzzy matching algorithm to compare website titles with MAL titles.
-     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 
@@ -212,7 +218,7 @@ class Matcher {
         if (tokensSite.length >= 5 && matches >= tokensSite.length - 1) return true;
 
         const allTokens = new Set([...tokensSite, ...tokensMal]);
-        const ratio = matches / allTokens.size;
+        const ratio = matches / (allTokens.size === 0 ? 1 : allTokens.size);
 
         if (tokensMal.length < 3) return ratio >= 1.0;
         
