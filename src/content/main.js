@@ -1,6 +1,8 @@
+// src/content/main.js
+
 /**
  * Main Controller Workflow
- * @description Initializes the extension observer and acts as the orchestrator between Data, UI, Utilities, and Dictionary. Retrieves and processes dynamic user settings.
+ * @description Initializes the extension observer and acts as the orchestrator between Data, UI, Utilities, and Dictionary.
  */
 
 class MalController {
@@ -10,7 +12,7 @@ class MalController {
         this.debounceTimer = null;
         this.isSearching = false;
         this.isPanelEnabled = true; 
-        this.activeHighlights = [1, 2, 3, 4, 6]; // Default: All enabled
+        this.activeHighlights = [1, 2, 3, 4, 6]; 
     }
 
     /**
@@ -20,7 +22,7 @@ class MalController {
         if (!PerformanceGuard.isRelevantPage()) return;
         
         try {
-            await SynonymDictionary.init(); // Essential: Wait for global dictionary load
+            await SynonymDictionary.init(); 
             
             const settings = await chrome.storage.local.get(['panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses']);
             this.isPanelEnabled = settings.panelEnabled !== false; 
@@ -43,7 +45,6 @@ class MalController {
 
     /**
      * Queries the Jikan API as a fallback when an item appears to be the main focus but is not in the local map.
-     * @param {string} rawTitle - The extracted title from the DOM.
      */
     searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled) return; 
@@ -51,7 +52,7 @@ class MalController {
         if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
         
         const cleanQuery = TextNormalizer.normalize(rawTitle);
-        if (cleanQuery.length < 4) return;
+        if (cleanQuery.length < 3) return;
         
         this.isSearching = true;
         document.body.style.cursor = 'wait';
@@ -65,11 +66,12 @@ class MalController {
             this.isSearching = false;
             document.body.style.cursor = 'default';
             
-            if (response && response.success && response.results) {
-                let bestMatch = null;
-                let finalStatus = null;
-                let finalType = null;
+            let bestMatch = null;
+            let finalStatus = null;
+            let finalType = null;
 
+            if (response && response.success && response.results) {
+                // 1. Try to find a match in the local list first
                 for (const apiItem of response.results) {
                     if (apiItem.type !== currentMediaType) continue;
 
@@ -81,25 +83,11 @@ class MalController {
                             finalStatus = foundInList.status;
                             finalType = foundInList.type;
                             
-                            // Auto-learning Contextual Synonym
+                            // Self-learning synonym logic
                             if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
                                 SynonymDictionary.save(cleanQuery, localTitle);
-                                console.log(`[MAL Highlighter] Learned synonym: "${cleanQuery}" -> "${localTitle}"`);
                             }
                             
-                            // Propagate all API-provided synonyms immediately to the Dictionary
-                            if (apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)) {
-                                apiItem.title_synonyms.forEach(syn => {
-                                    const cleanSyn = TextNormalizer.normalize(syn);
-                                    if (cleanSyn && cleanSyn !== localTitle) SynonymDictionary.save(cleanSyn, localTitle);
-                                });
-                            }
-                            
-                            if (apiItem.title_english) {
-                                const cleanEng = TextNormalizer.normalize(apiItem.title_english);
-                                if (cleanEng && cleanEng !== localTitle) SynonymDictionary.save(cleanEng, localTitle);
-                            }
-
                             setTimeout(() => this.processPage(), 200);
                             break;
                         }
@@ -107,27 +95,37 @@ class MalController {
                     if (bestMatch) break; 
                 }
 
+                // 2. Fallback: Validate Jikan results instead of blindly trusting them
                 if (!bestMatch) {
                     for (const apiItem of response.results) {
+                        if (apiItem.type !== currentMediaType) continue;
+                        
                         const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
-                        if (apiItem.type === currentMediaType && Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm)) {
+                        const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
+                        
+                        // We check if the returned API title actually matches our extracted slug
+                        if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
+                           (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm))) {
                             bestMatch = apiItem;
                             finalType = apiItem.type;
                             break;
                         }
                     }
                 }
-
-                if (!bestMatch) return;
-
-                UIManager.showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus, type: finalType });
             }
+
+            // 3. Handle Empty Results (Not Found on MAL or Rejected by FuzzyMatch)
+            if (!bestMatch) {
+                UIManager.showNotFoundPanel(cleanQuery);
+                return;
+            }
+
+            UIManager.showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus, type: finalType });
         });
     }
 
     /**
      * Analyzes the DOM to orchestrate highlighting and panel triggering.
-     * @description Decomposed to enforce Single Responsibility Principle.
      */
     processPage() {
         const isListingPage = ContextAnalyzer.isListingPage();
@@ -137,7 +135,7 @@ class MalController {
         
         let foundMainItem = this.scanDomElements(isListingPage, currentMediaType, panelVisible);
 
-        if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
+        if (this.isPanelEnabled && !foundMainItem) {
             foundMainItem = this.analyzeUrlForPanel(currentMediaType, panelVisible);
         }
 
@@ -147,11 +145,7 @@ class MalController {
     }
 
     /**
-     * Scans DOM candidates, applying borders and potentially triggering the info panel.
-     * @param {boolean} isListingPage - Flag to avoid treating directory items as main focus.
-     * @param {string} currentMediaType - Contextual media type.
-     * @param {boolean} panelVisible - Current state of the panel.
-     * @returns {boolean} True if the primary subject of the page was found.
+     * Scans DOM candidates, applying borders and potentially triggering the info panel ONLY if strictly matched.
      */
     scanDomElements(isListingPage, currentMediaType, panelVisible) {
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
@@ -200,13 +194,12 @@ class MalController {
 
             if (match) {
                 const card = UIManager.findCardContainer(element);
-                // Valida as preferências do utilizador para Highlights
                 if (card && this.activeHighlights.includes(match.status)) {
                     UIManager.applyVisuals(card, match.status, match.type);
                 }
             }
 
-            if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
+            if (this.isPanelEnabled && !foundMainItem) {
                 const tag = element.tagName;
                 const isHead1 = tag === 'H1'; 
                 const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -216,10 +209,7 @@ class MalController {
                 
                 if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
                     if (match && !panelVisible) {
-                        UIManager.showPanel(text, match);
-                        foundMainItem = true;
-                    } else if (!match && !panelVisible && isInUrl) {
-                        this.searchAndShowPanel(text);
+                        UIManager.showPanel(match.rawTitle || text, match);
                         foundMainItem = true;
                     }
                 }
@@ -230,9 +220,6 @@ class MalController {
 
     /**
      * Checks if the URL slug corresponds to an anime/manga to force-open the panel.
-     * @param {string} currentMediaType - Contextual media type.
-     * @param {boolean} panelVisible - Current state of the panel.
-     * @returns {boolean} True if the panel was successfully triggered via URL.
      */
     analyzeUrlForPanel(currentMediaType, panelVisible) {
         const urlTitle = TextNormalizer.getSlugFromUrl();
@@ -259,9 +246,9 @@ class MalController {
         }
         
         if (match && !panelVisible) {
-            UIManager.showPanel(urlTitle, match);
+            UIManager.showPanel(match.rawTitle || urlTitle, match);
             return true;
-        } else if (!panelVisible) {
+        } else if (!panelVisible && !ContextAnalyzer.isListingPage()) {
             this.searchAndShowPanel(urlTitle);
             return true;
         }

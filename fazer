@@ -2,16 +2,16 @@
 Quick-Add & Edit no Painel Flutuante: Em vez de apenas um botão "Open MyAnimeList", o painel deveria permitir clicar num botão "+" para incrementar o número do episódio/capítulo diretamente na extensão, refletindo a alteração na API do MAL via OAuth2.
 Sincronização Bidirecional (Sync-Back): Se o ReleaseMonitor deteta e te notifica de um episódio e tu clicas na notificação, a extensão devia perguntar automaticamente: "Queres marcar o episódio 10 como visto no MAL?".
 
-2. Melhorias de Interface (UI/UX)
+2. Melhorias de Interface (UI/UX) - A FAZER 1
 Personalização de Cores (Theming): Nas Settings, permitir que o utilizador escolha a cor das bordas. Há daltónicos que não distinguem o verde do vermelho, ou utilizadores que preferem um estilo minimalista (ex: todas as bordas brancas com brilho).
 Feedback Visual de Monitorização: No popup da extensão, mostrar o momento exato da "Próxima Verificação de Lançamentos" (ex: "A verificar novamente em 3 minutos..."), para que o utilizador saiba que o script em background está vivo e a funcionar.
 Badge Dynamics (Ícone): Quando o background.js deteta 3 episódios novos, alterar o ícone da extensão no browser para mostrar um pequeno círculo vermelho com o número "3" (usando a API chrome.action.setBadgeText).
 
-3. Performance
+3. Performance - A FAZER 3
 Refatoração para IntersectionObserver: Atualmente usas um MutationObserver e corres o processPage() inteiro (limite de 500 itens) sempre que o DOM muda. Em sites de infinite scroll, isto vai eventualmente causar bloqueios na thread (stuttering). A solução arquitetural é usar um IntersectionObserver: a extensão apenas faz o cálculo de Fuzzy Match e pinta a borda quando o cartão do anime entra na área visível do monitor.
 Debounce Dinâmico: O tempo de espera do debounce deve aumentar consoante o nível de stress da CPU, libertando o browser do utilizador em máquinas mais fracas.
 
-4. Qualidade de Código (Arquitetura)
+4. Qualidade de Código (Arquitetura) - A FAZER 2
 Migração para ES Modules: Atualmente, os teus Content Scripts injetam classes globais (class ContextAnalyzer, class UIManager) num único ambiente. A forma correta moderna é adicionar "type": "module" aos ficheiros e usar import { ContextAnalyzer } from './utils.js', isolando o escopo (scope) e impedindo que o teu código entre em conflito com variáveis globais do site que o utilizador está a visitar.
 Tipagem Estática (JSDoc Avançado ou TypeScript): Tens muitos objetos complexos a viajar do background.js para o content.js. Adotar TypeScript garante que se mudares a chave manga_title para title num lado, o compilador avisa-te do outro lado, extinguindo runtime errors.
 

@@ -1,3 +1,5 @@
+// src/content/ui.js
+
 /**
  * UI Presentation Layer
  * @description Manages all DOM manipulations, CSS injections, and floating panel generation.
@@ -68,13 +70,7 @@ class UIManager {
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <select id="malStatusSelect" class="mal-status-dropdown">
-                        <option value="watching">Watching</option>
-                        <option value="completed">Completed</option>
-                        <option value="on_hold">On Hold</option>
-                        <option value="dropped">Dropped</option>
-                        <option value="plan_to_watch">Plan to Watch</option>
-                    </select>
+                    <select id="malStatusSelect" class="mal-status-dropdown"></select>
                 </div>
                 <div id="malProgressWrap" style="display: none; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 5px 8px; border-radius: 4px;">
                     <span id="malProgressText" style="font-size: 11px; color: #ddd; font-weight: bold;"></span>
@@ -92,6 +88,33 @@ class UIManager {
         DraggableService.init(panel, header, this.savePanelPosition);
     }
 
+    /**
+     * Renders the panel specifically for items that returned 0 results from the Jikan API.
+     * @param {string} itemName - The title that was searched.
+     */
+    static async showNotFoundPanel(itemName) {
+        await this.createPanel();
+        const panel = document.getElementById('malControlPanel');
+        const titleEl = document.getElementById('malPanelTitle');
+        const statusSelect = document.getElementById('malStatusSelect');
+        const btn = document.getElementById('malOpenBtn');
+        const progressWrap = document.getElementById('malProgressWrap');
+        
+        titleEl.innerText = itemName.substring(0, 30) + (itemName.length > 30 ? '...' : '');
+        
+        statusSelect.innerHTML = `<option value="" disabled selected>${I18nService.get('statusNotFoundMal', this.currentLanguage)}</option>`;
+        statusSelect.disabled = true;
+        progressWrap.style.display = 'none';
+        
+        btn.innerText = I18nService.get('btnSearchMal', this.currentLanguage);
+        btn.onclick = () => {
+            window.open(`https://myanimelist.net/search/all?q=${encodeURIComponent(itemName)}`, '_blank');
+        };
+        
+        panel.classList.toggle('mal-panel-transparent', this.isPanelTransparent);
+        panel.classList.add('visible');
+    }
+
     static async showPanel(itemName, data) {
         await this.createPanel();
         const panel = document.getElementById('malControlPanel');
@@ -105,15 +128,23 @@ class UIManager {
         
         titleEl.innerText = itemName.substring(0, 30) + (itemName.length > 30 ? '...' : '');
         
+        const mediaType = data?.type || ContextAnalyzer.guessContentType();
+        const watchingLabel = mediaType === 'manga' ? 'statusReading' : 'statusWatching';
+
+        statusSelect.innerHTML = `
+            ${!data?.status ? `<option value="" disabled selected>${I18nService.get('statusAddToList', this.currentLanguage)}</option>` : ''}
+            <option value="watching">${I18nService.get(watchingLabel, this.currentLanguage)}</option>
+            <option value="completed">${I18nService.get('statusCompleted', this.currentLanguage)}</option>
+            <option value="on_hold">${I18nService.get('statusOnHold', this.currentLanguage)}</option>
+            <option value="dropped">${I18nService.get('statusDropped', this.currentLanguage)}</option>
+            <option value="plan_to_watch">${I18nService.get('statusPlanned', this.currentLanguage)}</option>
+        `;
+        statusSelect.disabled = false;
+
         if (data && data.status) {
-            // Map numeric status to MAL API string
             const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
             statusSelect.value = statusMap[data.status] || 'plan_to_watch';
-            statusSelect.disabled = false;
 
-            const mediaType = data.type || ContextAnalyzer.guessContentType();
-
-            // Progress Controls Logic
             if (data.progress !== undefined) {
                 const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
                 const field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
@@ -147,31 +178,31 @@ class UIManager {
             } else {
                 progressWrap.style.display = 'none';
             }
-
-            // Status Change Logic
-            statusSelect.onchange = (e) => {
-                const newStatus = e.target.value;
-                statusSelect.disabled = true;
-                chrome.runtime.sendMessage({
-                    action: "UPDATE_PROGRESS",
-                    id: data.id,
-                    mediaType: mediaType,
-                    data: { status: newStatus }
-                }, (response) => {
-                    statusSelect.disabled = false;
-                    if (response && response.success) DataManager.invalidateCache();
-                });
-            };
-
         } else {
-            statusSelect.innerHTML = `<option>${I18nService.get('statusNotInList', this.currentLanguage)}</option>`;
-            statusSelect.disabled = true;
             progressWrap.style.display = 'none';
         }
+
+        statusSelect.onchange = (e) => {
+            const newStatus = e.target.value;
+            if (!newStatus) return;
+
+            statusSelect.disabled = true;
+            chrome.runtime.sendMessage({
+                action: "UPDATE_PROGRESS",
+                id: data.id,
+                mediaType: mediaType,
+                data: { status: newStatus }
+            }, (response) => {
+                statusSelect.disabled = false;
+                if (response && response.success) {
+                    DataManager.invalidateCache();
+                }
+            });
+        };
         
+        btn.innerText = I18nService.get('panelOpenBtn', this.currentLanguage);
         btn.onclick = () => {
             if (data && data.id) {
-                const mediaType = data.type || ContextAnalyzer.guessContentType();
                 window.open(`https://myanimelist.net/${mediaType}/${data.id}`, '_blank');
             }
         };

@@ -1,6 +1,9 @@
+// src/content/utils.js
+
 /**
  * Utility Service Layer
  * @description Centralizes pure logic, heuristics, and configuration constants.
+ * Cleaned of hardcoded site names to ensure universal applicability.
  */
 
 const CONFIG = {
@@ -10,7 +13,7 @@ const CONFIG = {
     SITE_KEYWORDS: [
         'anime', 'manga', 'donghua', 'episodio', 'episode', 'season', 
         'temporada', 'assistir', 'online', 'legendado', 'dublado', 'stream',
-        'ler', 'capitulo', 'chapter', 'manhwa', 'comic', 'scan'
+        'ler', 'capitulo', 'chapter', 'manhwa', 'comic', 'scan', 'webtoon'
     ]
 };
 
@@ -19,9 +22,9 @@ const UI_BLOCKLIST = [
     "episodios", "episodio", "episode", "capitulo", "chapter", 
     "lancamentos", "parceiros", "dmca", "termos", 
     "login", "registrar", "assistir", "online", "download", 
-    "animes online", "todos os direitos", "copyright", "proximo episodio",
-    "episodio anterior", "lista de animes", "generos", "contato",
-    "filmes", "animes", "donghuas", "calendario", "mangas", "ler manga"
+    "todos os direitos", "copyright", "proximo episodio",
+    "episodio anterior", "lista de", "generos", "contato",
+    "filmes", "animes", "donghuas", "calendario", "mangas"
 ];
 
 const STATUS_MAP = {
@@ -33,6 +36,9 @@ const STATUS_MAP = {
 };
 
 class PerformanceGuard {
+    /**
+     * Determines if the script should run based on URL and page content metadata.
+     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -50,12 +56,15 @@ class PerformanceGuard {
 }
 
 class ContextAnalyzer {
+    /**
+     * Determines the most likely media type (anime/manga) based on URL and DOM heuristics.
+     */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
         
-        // Priority 1: URL Keywords
-        const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon'];
-        const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'season', 'ova'];
+        // Priority 1: Specific URL Keywords
+        const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon', 'ler', 'capitulo'];
+        const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'assistir', 'season', 'ova'];
         
         const urlTokens = url.replace(/[^a-z0-9]/g, ' ').split(' ');
         
@@ -73,67 +82,64 @@ class ContextAnalyzer {
         const chapterCount = (bodyText.match(/\b(chapter|capitulo|capítulo|scan|read|ler|manhwa|manhua)\b/g) || []).length;
         const episodeCount = (bodyText.match(/\b(episode|episodio|episódio|ep|watch|assistir|temporada|stream)\b/g) || []).length;
 
-        // Priority 2: Homepage predominant content
+        // Priority 2: Predominant counts for ambiguous homepages
         if (isHomePage) {
             if (chapterCount > episodeCount) return 'manga';
             if (episodeCount > chapterCount) return 'anime';
         }
 
-        // Priority 3: Page Elements
+        // Priority 3: Meta metadata and Title
         const title = document.title.toLowerCase();
         const metaDesc = document.querySelector('meta[name="description"]')?.content.toLowerCase() || "";
-        
-        const pageMangaKw = ['manga', 'manhwa', 'manhua', 'read', 'ler', 'capítulo', 'capitulo', 'chapter', 'scan'];
-        const pageAnimeKw = ['anime', 'episódio', 'episodio', 'episode', 'watch', 'assistir', 'temporada', 'season', 'stream'];
         
         let pageMangaScore = chapterCount;
         let pageAnimeScore = episodeCount;
         
-        pageMangaKw.forEach(kw => {
+        urlMangaKw.forEach(kw => {
             if (title.includes(kw)) pageMangaScore += 10;
             if (metaDesc.includes(kw)) pageMangaScore += 10;
         });
         
-        pageAnimeKw.forEach(kw => {
+        urlAnimeKw.forEach(kw => {
             if (title.includes(kw)) pageAnimeScore += 10;
             if (metaDesc.includes(kw)) pageAnimeScore += 10;
         });
 
-        if (pageMangaScore > pageAnimeScore) return 'manga';
-        if (pageAnimeScore > pageMangaScore) return 'anime';
-
-        return 'anime';
+        return (pageMangaScore > pageAnimeScore) ? 'manga' : 'anime';
     }
 
     /**
-     * Identifies if the current page is a directory or listing (e.g., /episodio/, /lancamentos/)
-     * @returns {boolean} True if the page is a listing, False if it's a specific media page.
+     * Identifies if the current page is a directory (listing multiple series) or a specific item.
      */
     static isListingPage() {
         const pathName = window.location.pathname.toLowerCase();
-        if (pathName === '/' || pathName.length < 3) return true;
-        
         const segments = pathName.split('/').filter(p => p.length > 0);
         
-        // If the path only has one segment, check if it's a known generic directory name
-        if (segments.length === 1) {
-            const genericDirectories = [
-                'episodios', 'episodio', 'lancamentos', 'animes', 
-                'mangas', 'filmes', 'ovas', 'calendario', 'lista'
-            ];
-            if (genericDirectories.includes(segments[0])) return true;
-        }
+        if (segments.length === 0) return true; // Home
         
+        const genericDirectories = [
+            'episodios', 'episodio', 'lancamentos', 'animes', 'anime',
+            'mangas', 'manga', 'filmes', 'ovas', 'calendario', 'lista', 'search', 'explorar', 'genre', 'categoria'
+        ];
+
+        if (segments.length === 1 && genericDirectories.includes(segments[0])) return true;
+        if (segments.length === 2 && genericDirectories.includes(segments[0]) && ['lista', 'popular', 'news', 'recentes', 'search'].includes(segments[1])) return true;
+
         return false;
     }
 }
 
 class TextNormalizer {
+    /**
+     * Cleans and normalizes strings for fuzzy matching, removing release noise.
+     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
         let clean = String(str).toLowerCase();
         clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
+        
+        // Strip episode/chapter numbering from the string
         clean = clean.replace(/\b(episodio|episode|ep|e|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
         clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1"); 
         clean = clean.replace(/\s+-\s+/g, " "); 
@@ -148,26 +154,42 @@ class TextNormalizer {
         return clean.trim();
     }
 
+    /**
+     * Extracts the series title slug from the URL robustly, ignoring generic directories and episode markers.
+     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
         if (segments.length === 0) return null;
         
-        const lastSegment = segments[segments.length - 1].toLowerCase();
-        if (UI_BLOCKLIST.includes(lastSegment) || /page\d+/.test(lastSegment)) return null;
+        // Generic directory paths that are NOT the title
+        const generics = ['anime', 'animes', 'manga', 'mangas', 'watch', 'read', 'ler', 'assistir', 'serie', 'series', 'tv', 'movie', 'filme', 'ova', 'category', 'genre'];
 
-        return lastSegment.replace(/-/g, ' ');
+        // Traverse backwards to find the actual media title slug
+        for (let i = segments.length - 1; i >= 0; i--) {
+            const seg = segments[i].toLowerCase();
+            
+            if (generics.includes(seg)) continue;
+            if (/^\d+$/.test(seg)) continue; // Skip pure numeric IDs
+            if (/^(capitulo|capítulo|cap|chapter|ch|episodio|episódio|ep|episode)[\s\-]?\d+/i.test(seg)) continue; // Skip chapter/ep segments
+            if (/^page\d+/.test(seg)) continue;
+
+            return seg.replace(/[\-_]/g, ' ').trim();
+        }
+
+        return null;
     }
 }
 
 class Matcher {
+    /**
+     * Core fuzzy matching algorithm to compare website titles with MAL titles.
+     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 
         if (malTitle.includes(siteTitle) || siteTitle.includes(malTitle)) {
             if (Math.abs(malTitle.length - siteTitle.length) <= 4) return true;
-            
-            // Heuristics for Prefix Truncation
             if (siteTitle.length >= 12 && malTitle.startsWith(siteTitle)) return true;
         }
 
@@ -182,7 +204,6 @@ class Matcher {
             if (tokensMal.includes(token)) {
                 matches++;
             } else if (index === tokensSite.length - 1 && token.length >= 3) {
-                // Heuristics for Truncated Tokens (e.g., kokuh -> kokuhaku)
                 const isTruncated = tokensMal.some(malToken => malToken.startsWith(token));
                 if (isTruncated) matches++;
             }

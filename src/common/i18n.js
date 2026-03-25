@@ -1,3 +1,5 @@
+// src/common/i18n.js
+
 /**
  * Internationalization (i18n) Service - SRP Application
  * @description Manages all static text across the extension to support multiple languages.
@@ -34,11 +36,14 @@ const DICTIONARY = {
         
         statusChecking: "Checking...",
         statusNotInList: "NOT IN LIST",
+        statusAddToList: "Add to List...",
         statusSaved: "Saved successfully!",
         statusErrorUser: "User not found or private.",
         statusErrorUrl: "Please enter a valid URL.",
+        statusNotFoundMal: "Not found on MAL",
         
         panelOpenBtn: "Open MyAnimeList",
+        btnSearchMal: "Search on MAL",
         btnQuickAdd: "Quick Add +1",
         
         notifTitle: "MAL Highlighter Monitor",
@@ -94,11 +99,14 @@ const DICTIONARY = {
         
         statusChecking: "A verificar...",
         statusNotInList: "NÃO ESTÁ NA LISTA",
+        statusAddToList: "Adicionar à Lista...",
         statusSaved: "Guardado com sucesso!",
         statusErrorUser: "Utilizador não encontrado ou privado.",
         statusErrorUrl: "Por favor, insere um URL válido.",
+        statusNotFoundMal: "Não encontrado no MAL",
         
         panelOpenBtn: "Abrir no MyAnimeList",
+        btnSearchMal: "Pesquisar no MAL",
         btnQuickAdd: "Adicionar Rápido +1",
         
         notifTitle: "Monitor do Realçador MAL",
