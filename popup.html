@@ -128,12 +128,22 @@
                     <option value="pt" data-i18n="langPt">Português</option>
                 </select>
             </div>
-            <button id="saveSettingsBtn" class="action-btn" data-i18n="btnSaveSettings">Save Settings</button>
+
+            <div class="input-group" style="display: flex; align-items: center; gap: 8px; margin-top: 15px;">
+                <input type="checkbox" id="panelEnabled" style="width: auto;" checked>
+                <label for="panelEnabled" style="margin: 0; cursor: pointer;" data-i18n="lblEnablePanel">Show Floating Panel</label>
+            </div>
+            <div class="input-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                <input type="checkbox" id="panelTransparent" style="width: auto;">
+                <label for="panelTransparent" style="margin: 0; cursor: pointer;" data-i18n="lblEnableTransparency">Transparent Panel (Hover to view)</label>
+            </div>
+
+            <button id="saveSettingsBtn" class="action-btn" style="margin-top: 15px;" data-i18n="btnSaveSettings">Save Settings</button>
             <div id="statusSettings" class="status"></div>
         </div>
     </div>
     
-    <div class="footer">Universal Version 1.4</div>
+    <div class="footer">Universal Version 1.5</div>
     <script src="i18n.js"></script>
     <script src="popup.js"></script>
 </body>

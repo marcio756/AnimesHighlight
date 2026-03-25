@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Settings
     const langSelect = document.getElementById('langSelect');
+    const checkPanelEnabled = document.getElementById('panelEnabled');
+    const checkPanelTrans = document.getElementById('panelTransparent');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
 
@@ -48,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // --- INIT ---
-    chrome.storage.local.get(['malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled', 'extensionLang'], (res) => {
+    chrome.storage.local.get(['malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled', 'extensionLang', 'panelEnabled', 'panelTransparent'], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
             if (res.malAvatar) showProfile(res.malUsername, res.malAvatar);
@@ -56,6 +58,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (res.monitorUrl) inputUrl.value = res.monitorUrl;
         if (res.monitorEnabled !== undefined) checkEnabled.checked = res.monitorEnabled;
         if (res.extensionLang) langSelect.value = res.extensionLang;
+        
+        // Load Panel Settings
+        if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
+        if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
     });
 
     // --- PROFILE LOGIC ---
@@ -79,8 +85,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
                         showProfile(username, imageUrl);
                         saveProfileBtn.disabled = false;
-                        // Clear content cache to force refetch with new user
-                        localStorage.removeItem('mal_v33_full_list'); 
+                        localStorage.removeItem('mal_v35_full_list'); 
                     });
                 } else {
                     updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
@@ -112,12 +117,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- SETTINGS LOGIC ---
     saveSettingsBtn.addEventListener('click', () => {
         const selectedLang = langSelect.value;
-        chrome.storage.local.set({ extensionLang: selectedLang }, () => {
+        const pEnabled = checkPanelEnabled.checked;
+        const pTrans = checkPanelTrans.checked;
+
+        chrome.storage.local.set({ 
+            extensionLang: selectedLang,
+            panelEnabled: pEnabled,
+            panelTransparent: pTrans
+        }, () => {
             currentLang = selectedLang;
-            I18nService.translateDOM(currentLang); // Update UI immediately
+            I18nService.translateDOM(currentLang); 
             updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
             
-            // Re-render other dynamic texts
             if (emptyStateEl.style.display === 'block') {
                 emptyStateEl.innerText = I18nService.get('emptyHistory', currentLang);
             }

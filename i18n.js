@@ -28,6 +28,9 @@ const DICTIONARY = {
         langEn: "English",
         langPt: "Português",
         
+        lblEnablePanel: "Show Floating Panel",
+        lblEnableTransparency: "Transparent Panel (Hover to view)",
+        
         statusChecking: "Checking...",
         statusNotInList: "NOT IN LIST",
         statusSaved: "Saved successfully!",
@@ -62,6 +65,9 @@ const DICTIONARY = {
         lblLanguage: "Idioma da Extensão:",
         langEn: "English",
         langPt: "Português",
+        
+        lblEnablePanel: "Ativar Painel Flutuante",
+        lblEnableTransparency: "Ativar Transparência no Painel",
         
         statusChecking: "A verificar...",
         statusNotInList: "NÃO ESTÁ NA LISTA",
@@ -108,7 +114,7 @@ class I18nService {
     static translateDOM(lang) {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
-            el.innerText = this.get(key, lang);
+            if (key) el.innerText = this.get(key, lang);
         });
     }
 }

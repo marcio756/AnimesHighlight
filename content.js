@@ -1,11 +1,13 @@
 /**
- * Content Script - MAL Highlighter v34.0 (I18n Integration)
- * * Alterações de Arquitetura:
- * 1. O painel flutuante agora consome o I18nService para traduzir botões e estados.
+ * Content Script - MAL Highlighter v35.0 (Strict Heuristics & Data Grouping)
+ * * Architectural Changes:
+ * 1. DataManager: Map values are now Arrays to prevent Key Collisions between Animes and Mangas with identical names.
+ * 2. MalController: Implemented strict HomePageGuard to prevent floating panel on index pages.
+ * 3. Contextual Resolving: The script now selects the correct media type from the matched array based on the site's context.
  */
 
 const CONFIG = {
-    CACHE_KEY: 'mal_v33_full_list', 
+    CACHE_KEY: 'mal_v35_full_list', 
     CACHE_DURATION: 1000 * 60 * 15,
     DEBOUNCE_DELAY: 500,
     SITE_KEYWORDS: [
@@ -32,9 +34,14 @@ const STATUS_MAP = {
     6: { class: 'mal-plan', label: 'PLANNED', color: '#787878' }
 };
 
-// --- MÓDULOS (CAMADA DE SERVIÇO) ---
+// --- MODULES (SERVICE LAYER) ---
 
 class PerformanceGuard {
+    /**
+     * Validates if the current web page context is related to anime or manga.
+     * Prevents the script from wasting CPU cycles on irrelevant websites.
+     * @returns {boolean} True if the page context matches the keywords.
+     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -54,6 +61,11 @@ class PerformanceGuard {
 }
 
 class ContextAnalyzer {
+    /**
+     * Infers the type of media (anime or manga) based on the URL and page title keywords.
+     * Crucial for deciding which MyAnimeList profile to open when names collide.
+     * @returns {string} The inferred media type: 'anime' or 'manga'.
+     */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
         const title = document.title.toLowerCase();
@@ -69,6 +81,11 @@ class ContextAnalyzer {
 }
 
 class TextNormalizer {
+    /**
+     * Strips punctuation, accents, and irrelevant keywords to create a clean string for fuzzy matching.
+     * @param {string} str - The raw title string extracted from the DOM.
+     * @returns {string} The normalized string.
+     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
@@ -88,6 +105,10 @@ class TextNormalizer {
         return clean.trim();
     }
 
+    /**
+     * Extracts a potential title from the URL path as a fallback mechanism.
+     * @returns {string|null} The extracted slug or null if invalid.
+     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
@@ -101,6 +122,10 @@ class TextNormalizer {
 }
 
 class DataManager {
+    /**
+     * Retrieves the stored MAL username.
+     * @returns {Promise<string>} The username.
+     */
     static async getUsername() {
         return new Promise((resolve) => {
             chrome.storage.local.get(['malUsername'], (result) => {
@@ -109,6 +134,11 @@ class DataManager {
         });
     }
 
+    /**
+     * Fetches and caches the user's combined list (Anime & Manga).
+     * Groups identical titles into an array to prevent key collision overrides.
+     * @returns {Promise<Map<string, Array<Object>>>} A Map where the key is the normalized title and the value is an array of media objects.
+     */
     static async getUserList() {
         const USERNAME = await this.getUsername();
         const cached = localStorage.getItem(CONFIG.CACHE_KEY);
@@ -129,7 +159,15 @@ class DataManager {
                     response.data.forEach(item => {
                         if (!item || !item.title) return;
                         
-                        newMap.set(TextNormalizer.normalize(item.title), {
+                        const normTitle = TextNormalizer.normalize(item.title);
+                        
+                        // Initialize array if it doesn't exist for this title
+                        if (!newMap.has(normTitle)) {
+                            newMap.set(normTitle, []);
+                        }
+
+                        // Push the item to handle title collisions (e.g., Anime and Manga with the exact same name)
+                        newMap.get(normTitle).push({
                             status: item.status,
                             id: item.id,
                             score: item.score,
@@ -150,6 +188,12 @@ class DataManager {
 }
 
 class Matcher {
+    /**
+     * Performs a fuzzy string comparison to match DOM titles with MAL titles.
+     * @param {string} siteTitle - The normalized title from the website.
+     * @param {string} malTitle - The normalized title from MyAnimeList.
+     * @returns {boolean} True if the strings are a likely match.
+     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 
@@ -183,6 +227,11 @@ class Matcher {
 }
 
 class UIManager {
+    /**
+     * Applies the appropriate CSS classes and dataset attributes for visual highlighting.
+     * @param {HTMLElement} element - The DOM element to highlight.
+     * @param {number} statusId - The MAL status ID.
+     */
     static applyVisuals(element, statusId) {
         if (element.classList.contains('mal-item-highlight')) return;
         const styleInfo = STATUS_MAP[statusId];
@@ -193,6 +242,11 @@ class UIManager {
         element.dataset.malStatus = statusId;
     }
 
+    /**
+     * Traverses up the DOM tree from a title element to find the logical "Card" container.
+     * @param {HTMLElement} titleElement - The text element that matched a list item.
+     * @returns {HTMLElement|null} The container element, or null if not found.
+     */
     static findCardContainer(titleElement) {
         let current = titleElement.parentElement;
         let attempts = 0;
@@ -219,10 +273,12 @@ class UIManager {
         return null;
     }
 
+    /**
+     * Creates and injects the floating control panel into the DOM.
+     */
     static async createPanel() {
         if (document.getElementById('malControlPanel')) return;
         
-        // Fetch language logic via I18nService instance imported from manifest
         const lang = await I18nService.getCurrentLang();
         
         const panel = document.createElement('div');
@@ -238,6 +294,11 @@ class UIManager {
         document.body.appendChild(panel);
     }
 
+    /**
+     * Populates the floating panel with the relevant item data and displays it.
+     * @param {string} itemName - The title of the item.
+     * @param {Object} data - The matched item data object.
+     */
     static async showPanel(itemName, data) {
         await this.createPanel();
         const lang = await I18nService.getCurrentLang();
@@ -249,7 +310,7 @@ class UIManager {
         
         titleEl.innerText = itemName.substring(0, 30) + (itemName.length > 30 ? '...' : '');
         
-        if (data.status && STATUS_MAP[data.status]) {
+        if (data && data.status && STATUS_MAP[data.status]) {
             statusEl.innerText = STATUS_MAP[data.status].label;
             statusEl.style.color = STATUS_MAP[data.status].color;
         } else {
@@ -258,7 +319,7 @@ class UIManager {
         }
         
         btn.onclick = () => {
-            if (data.id) {
+            if (data && data.id) {
                 const mediaType = data.type || ContextAnalyzer.guessContentType();
                 window.open(`https://myanimelist.net/${mediaType}/${data.id}`, '_blank');
             } else {
@@ -269,13 +330,16 @@ class UIManager {
         panel.classList.add('visible');
     }
 
+    /**
+     * Hides the floating control panel.
+     */
     static hidePanel() {
         const panel = document.getElementById('malControlPanel');
         if (panel) panel.classList.remove('visible');
     }
 }
 
-// --- CONTROLLER PRINCIPAL ---
+// --- MAIN CONTROLLER ---
 
 class MalController {
     constructor() {
@@ -285,6 +349,9 @@ class MalController {
         this.isSearching = false;
     }
 
+    /**
+     * Bootstraps the highlighter logic.
+     */
     async init() {
         if (!PerformanceGuard.isRelevantPage()) return;
         
@@ -296,6 +363,10 @@ class MalController {
         }
     }
 
+    /**
+     * Queries the Jikan API as a fallback when an item appears to be the main focus but is not in the local map.
+     * @param {string} rawTitle - The extracted title from the DOM.
+     */
     searchAndShowPanel(rawTitle) {
         if (this.isSearching) return;
         if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
@@ -329,9 +400,11 @@ class MalController {
                 if (!bestMatch) return;
 
                 let finalStatus = null;
-                for (let [key, val] of this.globalMediaMap.entries()) {
-                    if (val.id === bestMatch.mal_id && val.type === currentMediaType) {
-                        finalStatus = val.status;
+                // Look up in our local map to see if the API result exists in the user's list
+                for (let [key, valArray] of this.globalMediaMap.entries()) {
+                    const found = valArray.find(v => v.id === bestMatch.mal_id && v.type === currentMediaType);
+                    if (found) {
+                        finalStatus = found.status;
                         break;
                     }
                 }
@@ -340,6 +413,9 @@ class MalController {
         });
     }
 
+    /**
+     * Analyzes the DOM to find titles, highlight cards, and detect the "main" item being viewed.
+     */
     processPage() {
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, [class*="title"], [class*="nome"], article h3, li h3';
         const candidates = document.querySelectorAll(selector);
@@ -349,6 +425,11 @@ class MalController {
 
         let processedCount = 0;
         const PROCESS_LIMIT = 500; 
+        
+        // Context variables for smart matching
+        const currentMediaType = ContextAnalyzer.guessContentType();
+        const pathName = window.location.pathname;
+        const isHomePage = pathName === '/' || pathName.length < 3; 
 
         for (const element of candidates) {
             if (processedCount > PROCESS_LIMIT) break;
@@ -367,34 +448,44 @@ class MalController {
 
             processedCount++;
 
-            let match = null;
+            // Extract the matching array of objects (could contain both Anime and Manga versions)
+            let matchArray = null;
             if (this.globalMediaMap.has(itemTitle)) {
-                match = this.globalMediaMap.get(itemTitle);
+                matchArray = this.globalMediaMap.get(itemTitle);
             } else {
                 if (itemTitle.length < 50) {
-                    for (let [malTitle, data] of this.globalMediaMap) {
+                    for (let [malTitle, dataArray] of this.globalMediaMap) {
                         if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
-                            match = data;
+                            matchArray = dataArray;
                             break;
                         }
                     }
                 }
             }
 
+            let match = null;
+            if (matchArray && matchArray.length > 0) {
+                // Heuristic: Prefer the list item that matches the website's context (e.g. Manga item on a Manga reader)
+                match = matchArray.find(m => m.type === currentMediaType) || matchArray[0];
+            }
+
+            // Highlighting Phase
             if (match) {
                 const card = UIManager.findCardContainer(element);
                 if (card) UIManager.applyVisuals(card, match.status);
             }
 
-            if (!foundMainItem) {
+            // Main Item Detection Phase (Floating Panel Logic)
+            if (!foundMainItem && !isHomePage) {
                 const tag = element.tagName;
-                const isHead = ['H1','H2'].includes(tag);
-                const urlPath = window.location.pathname.toLowerCase().replace(/[^a-z0-9]/g, "");
+                const isHead1 = tag === 'H1'; // Strict requirement: Must be H1 to prevent false positives on sliders/carousels
+                const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
                 const titleClean = itemTitle.replace(/\s/g, "");
                 
                 const isInUrl = urlPath.includes(titleClean.replace(/-/g, "")) && titleClean.length > 5;
                 
-                if ((isHead || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav')) {
+                // Exclude elements inside common non-main areas
+                if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
                     if (match && !panelVisible) {
                         UIManager.showPanel(text, match);
                         foundMainItem = true;
@@ -406,19 +497,26 @@ class MalController {
             }
         }
 
-        if (!foundMainItem) {
+        // URL Fallback Phase: If DOM parsing failed to find a main item, guess from the URL slug
+        if (!foundMainItem && !isHomePage) {
             const urlTitle = TextNormalizer.getSlugFromUrl();
             if (urlTitle && urlTitle.length > 3) {
                 const normUrlTitle = TextNormalizer.normalize(urlTitle);
                 if (!UI_BLOCKLIST.some(term => normUrlTitle.includes(term))) {
-                     let match = this.globalMediaMap.get(normUrlTitle);
-                     if (!match) {
-                         for (let [malTitle, data] of this.globalMediaMap) {
+                     
+                     let matchArray = this.globalMediaMap.get(normUrlTitle);
+                     if (!matchArray) {
+                         for (let [malTitle, dataArray] of this.globalMediaMap) {
                              if (Matcher.isFuzzyMatch(normUrlTitle, malTitle)) {
-                                 match = data;
+                                 matchArray = dataArray;
                                  break;
                              }
                          }
+                     }
+
+                     let match = null;
+                     if (matchArray && matchArray.length > 0) {
+                         match = matchArray.find(m => m.type === currentMediaType) || matchArray[0];
                      }
                      
                      if (match && !panelVisible) {
@@ -432,11 +530,15 @@ class MalController {
             }
         }
 
+        // Hide panel if user navigates back to a homepage dynamically (SPA support)
         if (!foundMainItem) {
             setTimeout(() => { if (!foundMainItem) UIManager.hidePanel(); }, 500);
         }
     }
 
+    /**
+     * Initializes the MutationObserver to handle dynamically loaded content (Infinite Scroll, SPAs).
+     */
     startObserver() {
         if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
         
@@ -452,7 +554,7 @@ class MalController {
     }
 }
 
-// --- BOOT ---
+// --- BOOT PROCESS ---
 const app = new MalController();
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => app.init());
