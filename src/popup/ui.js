@@ -70,9 +70,6 @@ export class PopupUI {
         container.style.display = 'flex';
     }
 
-    /**
-     * Gera os cartões dos sites monitorizados (Optimistic UI)
-     */
     static renderSitesList(sites, listEl, emptyEl, callbacks) {
         listEl.innerHTML = "";
         
@@ -111,7 +108,6 @@ export class PopupUI {
             listEl.appendChild(li);
         });
 
-        // Eventos
         listEl.querySelectorAll('.toggle-site').forEach(btn => {
             btn.addEventListener('change', (e) => callbacks.onToggle(e.target.dataset.id, e.target.checked));
         });
@@ -120,9 +116,6 @@ export class PopupUI {
         });
     }
 
-    /**
-     * Preenche o dropdown do Histórico dinamicamente com os sites.
-     */
     static updateSiteFilterDropdown(sites, selectEl, currentLang) {
         if (!selectEl) return;
         const currentVal = selectEl.value;
@@ -137,7 +130,6 @@ export class PopupUI {
             });
         }
         
-        // Restore value if it still exists
         if (Array.from(selectEl.options).some(o => o.value === currentVal)) {
             selectEl.value = currentVal;
         }
@@ -159,7 +151,7 @@ export class PopupUI {
         clearBtn.style.display = 'block';
 
         filteredLogs.forEach((log) => {
-            const originalIndex = logs.indexOf(log); // Para deleção na array original
+            const originalIndex = logs.indexOf(log); 
             const li = document.createElement('li');
             const date = new Date(log.date).toLocaleString();
             const actionUrl = log.url || `https://myanimelist.net/${log.type || 'anime'}/${log.id || ''}`;
@@ -185,7 +177,7 @@ export class PopupUI {
             listEl.appendChild(li);
         });
 
-        // Eventos Deleção / Abertura
+        // Apenas o botão de Apagar (Cruz/X) invoca o handleRemove agora.
         const handleRemove = (e) => {
             const idx = parseInt(e.target.getAttribute('data-index'));
             logs.splice(idx, 1);
@@ -193,6 +185,6 @@ export class PopupUI {
         };
 
         listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
-        listEl.querySelectorAll('.open-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
+        // O botão 'Abrir' funciona apenas como um link href normal (sem apagar o log).
     }
 }

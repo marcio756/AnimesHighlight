@@ -16,7 +16,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
     
-    // Feature: Profile
     const inputUser = document.getElementById('username');
     const saveProfileBtn = document.getElementById('saveBtn');
     const statusProfile = document.getElementById('statusProfile');
@@ -24,24 +23,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     const avatar = document.getElementById('avatar');
     const welcomeText = document.getElementById('welcomeText');
 
-    // Feature: Monitor (Multi-Site)
     const inputNewSiteUrl = document.getElementById('newSiteUrl');
     const addSiteBtn = document.getElementById('addSiteBtn');
     const monitoredSitesList = document.getElementById('monitoredSitesList');
     const emptySitesState = document.getElementById('emptySitesState');
     const statusMonitor = document.getElementById('statusMonitor');
 
-    // Feature: History
     const notifListEl = document.getElementById('notificationList');
     const emptyStateEl = document.getElementById('emptyState');
     const clearNotifsBtn = document.getElementById('clearNotifsBtn');
     const historySiteFilter = document.getElementById('historySiteFilter');
 
-    // Feature: Settings
     const langSelect = document.getElementById('langSelect');
     const checkPanelEnabled = document.getElementById('panelEnabled');
     const checkPanelTrans = document.getElementById('panelTransparent');
     const checkSavePanelPos = document.getElementById('savePanelPos');
+    const checkAutoUpdate = document.getElementById('autoUpdateProgress');
     const hlStatusCheckboxes = document.querySelectorAll('.hl-status');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
@@ -55,9 +52,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     let globalSites = [];
     let globalLogs = [];
 
-    // ==========================================
-    // UI Interactions: Theme Toggle Logic
-    // ==========================================
     const updateThemeIcon = () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         themeToggleBtn.innerText = isDark ? '☀️' : '🌙';
@@ -81,9 +75,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     hlStatusCheckboxes.forEach(cb => cb.addEventListener('change', syncColorVisibility));
 
-    // ==========================================
-    // Core Multi-Site & History Logic
-    // ==========================================
     const saveSitesState = (triggerAlarmRefresh = true) => {
         chrome.storage.local.set({ monitoredSites: globalSites }, () => {
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
@@ -124,10 +115,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     PopupUI.initTabs(tabs, panes, loadCoreData, loadCoreData);
 
-    // Initial Storage Settings Load
     chrome.storage.local.get([
         'malUsername', 'malAvatar', 'extensionLang', 
-        'panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses', 'customColors'
+        'panelEnabled', 'panelTransparent', 'savePanelPos', 'autoUpdateProgress', 'highlightStatuses', 'customColors'
     ], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
@@ -137,6 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
         if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
         if (res.savePanelPos !== undefined) checkSavePanelPos.checked = res.savePanelPos;
+        if (res.autoUpdateProgress !== undefined) checkAutoUpdate.checked = res.autoUpdateProgress;
         
         if (res.highlightStatuses) {
             hlStatusCheckboxes.forEach(cb => cb.checked = res.highlightStatuses.includes(parseInt(cb.value)));
@@ -147,10 +138,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
         syncColorVisibility();
-        loadCoreData(); // Prime load
+        loadCoreData(); 
     });
 
-    // Add Site (Optimistic UI)
     addSiteBtn.addEventListener('click', () => {
         const urlRaw = inputNewSiteUrl.value.trim();
         if (!urlRaw) return;
@@ -161,13 +151,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             formattedUrl = urlObj.href;
             const siteName = urlObj.hostname.replace('www.', '');
 
-            // Evitar duplicados
             if (globalSites.some(s => s.url === formattedUrl)) {
                 PopupUI.updateStatus(statusMonitor, "Site already exists.", "error");
                 return;
             }
 
-            // Optimistic Skeleton Push
             globalSites.push({ id: 'temp', isSkeleton: true });
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
             inputNewSiteUrl.value = "";
@@ -181,7 +169,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     enabled: true
                 });
                 saveSitesState();
-            }, 500); // Progress Illusion (500ms delay)
+            }, 500);
 
         } catch (e) {
             PopupUI.updateStatus(statusMonitor, I18nService.get('statusErrorUrl', currentLang), "error");
@@ -191,12 +179,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputNewSiteUrl.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn.click(); });
     historySiteFilter.addEventListener('change', () => renderLogs());
 
-    // Settings Save Flow
     saveSettingsBtn.addEventListener('click', () => {
         const selectedLang = langSelect.value;
         const pEnabled = checkPanelEnabled.checked;
         const pTrans = checkPanelTrans.checked;
         const sPos = checkSavePanelPos.checked;
+        const aUpdate = checkAutoUpdate.checked;
 
         const activeHighlights = Array.from(hlStatusCheckboxes).filter(cb => cb.checked).map(cb => parseInt(cb.value));
         const activeColors = {
@@ -206,11 +194,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         chrome.storage.local.set({ 
             extensionLang: selectedLang, panelEnabled: pEnabled, panelTransparent: pTrans,
-            savePanelPos: sPos, highlightStatuses: activeHighlights, customColors: activeColors
+            savePanelPos: sPos, autoUpdateProgress: aUpdate, highlightStatuses: activeHighlights, customColors: activeColors
         }, () => {
             currentLang = selectedLang;
             I18nService.translateDOM(currentLang); 
-            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang); // Update translation on dropdown
+            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang); 
             PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
         });
     });

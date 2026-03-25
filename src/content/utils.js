@@ -1,37 +1,5 @@
 // src/content/utils.js
 
-/**
- * @typedef {Object} MalItem
- * @property {number} id - O identificador único do MyAnimeList.
- * @property {string} title - O título oficial.
- * @property {string|null} [title_eng] - O título em Inglês (opcional).
- * @property {number} status - O estado (1=Watching, 2=Completed, 3=OnHold, 4=Dropped, 6=PlanToWatch).
- * @property {number} score - A classificação do utilizador.
- * @property {'anime'|'manga'} type - O tipo de média.
- * @property {number} [num_watched_episodes] - Progresso de episódios (Anime).
- * @property {number} [num_read_chapters] - Progresso de capítulos (Manga).
- * @property {number} [progress] - Métrica de progresso unificada.
- * @property {string} [rawTitle] - Título original recolhido da página.
- */
-
-/**
- * @typedef {Object} ExtensionMessage
- * @property {string} action - O comando da ação (ex: "SEARCH_ITEM", "UPDATE_PROGRESS").
- * @property {string} [title] - Título a pesquisar.
- * @property {number} [id] - ID do item a atualizar.
- * @property {'anime'|'manga'} [mediaType] - Tipo de média para a ação.
- * @property {Object} [data] - Objeto de dados para atualização no servidor.
- * @property {string} [username] - Nome de utilizador do MAL.
- */
-
-/**
- * @typedef {Object} ExtensionResponse
- * @property {boolean} success - O estado de sucesso da operação.
- * @property {any} [data] - Os dados devolvidos em caso de sucesso.
- * @property {Array<MalItem>} [results] - Resultados da pesquisa.
- * @property {string} [error] - Mensagem de erro.
- */
-
 export const CONFIG = {
     CACHE_KEY: 'mal_v35_full_list', 
     CACHE_DURATION: 1000 * 60 * 15, 
@@ -65,10 +33,39 @@ export const STATUS_MAP = {
     6: { class: 'mal-plan', labelKey: 'statusPlanned', color: '#787878' }
 };
 
-export class DynamicDebouncer {
+export class ProgressExtractor {
     /**
-     * @param {Function} callback - A função a ser atrasada.
+     * Tenta inferir o número do episódio/capítulo a partir de uma string (ex: URL ou Título)
+     * @param {string} text 
+     * @param {'anime'|'manga'} mediaType 
+     * @returns {number|null}
      */
+    static extract(text, mediaType) {
+        if (!text) return null;
+        const clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        // Procura padrões explícitos como "ep 80", "episodio-80", "chapter 80", "cap_80", "e080"
+        const animeRegex = /\b(ep|episodio|episode|e)\s*[-_:]?\s*0*(\d+)\b/i;
+        const mangaRegex = /\b(cap|capitulo|chapter|ch|c)\s*[-_:]?\s*0*(\d+)\b/i;
+        
+        const regex = mediaType === 'manga' ? mangaRegex : animeRegex;
+        const match = clean.match(regex);
+        
+        if (match && match[2]) {
+            return parseInt(match[2], 10);
+        }
+        
+        // Fallback para URLs que terminam diretamente no número exato: "one-piece-1099"
+        const endNumMatch = clean.match(/-0*(\d+)\/?$/);
+        if (endNumMatch && endNumMatch[1]) {
+            return parseInt(endNumMatch[1], 10);
+        }
+        
+        return null;
+    }
+}
+
+export class DynamicDebouncer {
     constructor(callback) {
         this.callback = callback;
         this.timer = null;
@@ -95,9 +92,6 @@ export class DynamicDebouncer {
 }
 
 export class PerformanceGuard {
-    /**
-     * @returns {boolean}
-     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -115,9 +109,6 @@ export class PerformanceGuard {
 }
 
 export class ContextAnalyzer {
-    /**
-     * @returns {'anime'|'manga'}
-     */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
         
@@ -164,9 +155,6 @@ export class ContextAnalyzer {
         return (pageMangaScore > pageAnimeScore) ? 'manga' : 'anime';
     }
 
-    /**
-     * @returns {boolean}
-     */
     static isListingPage() {
         const pathName = window.location.pathname.toLowerCase();
         const segments = pathName.split('/').filter(p => p.length > 0);
@@ -186,10 +174,6 @@ export class ContextAnalyzer {
 }
 
 export class TextNormalizer {
-    /**
-     * @param {string} str 
-     * @returns {string}
-     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
@@ -210,9 +194,6 @@ export class TextNormalizer {
         return clean.trim();
     }
 
-    /**
-     * @returns {string|null}
-     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
@@ -236,11 +217,6 @@ export class TextNormalizer {
 }
 
 export class Matcher {
-    /**
-     * @param {string} siteTitle 
-     * @param {string} malTitle 
-     * @returns {boolean}
-     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 

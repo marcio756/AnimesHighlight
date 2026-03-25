@@ -1,16 +1,11 @@
 // src/content/main.js
 
-import { PerformanceGuard, ContextAnalyzer, TextNormalizer, Matcher, DynamicDebouncer, UI_BLOCKLIST } from './utils.js';
+import { PerformanceGuard, ContextAnalyzer, TextNormalizer, Matcher, DynamicDebouncer, UI_BLOCKLIST, ProgressExtractor } from './utils.js';
 import { SynonymDictionary, DataManager } from './data.js';
 import { UIManager } from './ui.js';
 
-/**
- * @class MalController
- * @description Inicia o observador de extensões e orquestra Dados, UI, Utilitários e Dicionários.
- */
 class MalController {
     constructor() {
-        /** @type {Map<string, Array<import('./utils.js').MalItem>>} */
         this.globalMediaMap = new Map();
         this.mutationObserver = null;
         this.intersectionObserver = null;
@@ -18,6 +13,9 @@ class MalController {
         this.isSearching = false;
         this.isPanelEnabled = true; 
         this.activeHighlights = [1, 2, 3, 4, 5]; 
+        
+        this.autoUpdateProgress = false;
+        this.autoUpdatedId = null;
     }
 
     async init() {
@@ -28,6 +26,7 @@ class MalController {
             
             const settings = await chrome.storage.local.get();
             this.isPanelEnabled = settings.panelEnabled !== false; 
+            this.autoUpdateProgress = settings.autoUpdateProgress === true;
             
             if (settings.highlightStatuses) {
                 this.activeHighlights = settings.highlightStatuses;
@@ -39,6 +38,19 @@ class MalController {
             await UIManager.initLanguage();
             await UIManager.initTheming(); 
 
+            // Escutador Reativo: Mantém as configurações sincronizadas sem precisar de dar F5 na página
+            chrome.storage.onChanged.addListener((changes, area) => {
+                if (area === 'local' && changes.autoUpdateProgress !== undefined) {
+                    this.autoUpdateProgress = changes.autoUpdateProgress.newValue === true;
+                    // Se a opção foi ativada agora mesmo e já estamos na página do episódio, força a verificação
+                    if (this.autoUpdateProgress) {
+                        const currentMediaType = ContextAnalyzer.guessContentType();
+                        let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
+                        this.analyzeUrlForPanel(currentMediaType, panelVisible);
+                    }
+                }
+            });
+
             this.globalMediaMap = await DataManager.getUserList();
             this.startObserver();
         } catch (e) {
@@ -46,9 +58,6 @@ class MalController {
         }
     }
 
-    /**
-     * @param {string} rawTitle - O título por normalizar extraído da página
-     */
     searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled) return; 
         if (this.isSearching) return;
@@ -62,13 +71,10 @@ class MalController {
 
         const currentMediaType = ContextAnalyzer.guessContentType();
 
-        /** @type {import('./utils.js').ExtensionMessage} */
-        const payload = { 
+        chrome.runtime.sendMessage({ 
             action: "SEARCH_ITEM", 
             title: cleanQuery
-        };
-
-        chrome.runtime.sendMessage(payload, (/** @type {import('./utils.js').ExtensionResponse} */ response) => {
+        }, (response) => {
             this.isSearching = false;
             document.body.style.cursor = 'default';
             
@@ -169,9 +175,6 @@ class MalController {
         this.dynamicDebouncer.trigger();
     }
 
-    /**
-     * @param {HTMLElement} rootNode
-     */
     observeNewElements(rootNode) {
         const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
         
@@ -185,12 +188,6 @@ class MalController {
         }
     }
 
-    /**
-     * @param {HTMLElement} element
-     * @param {boolean} isListingPage
-     * @param {'anime'|'manga'} currentMediaType
-     * @param {boolean} panelVisible
-     */
     processElement(element, isListingPage, currentMediaType, panelVisible) {
         if (element.closest('[data-mal-status]')) return;
         if (element.offsetParent === null) return; 
@@ -250,10 +247,43 @@ class MalController {
     }
 
     /**
-     * @param {'anime'|'manga'} currentMediaType
-     * @param {boolean} panelVisible
-     * @returns {boolean}
+     * Tenta atualizar o MyAnimeList de forma assíncrona baseada na leitura do site atual
      */
+    attemptAutoUpdate(match, currentMediaType) {
+        if (!this.autoUpdateProgress || !match) return;
+        if (this.autoUpdatedId === match.id) return; 
+
+        const url = window.location.pathname;
+        const title = document.title;
+
+        const currentNum = ProgressExtractor.extract(url, currentMediaType) || ProgressExtractor.extract(title, currentMediaType);
+
+        if (currentNum && currentNum > (match.progress || 0)) {
+            console.log(`[MAL Highlighter] Auto-updating ${match.rawTitle} to ${currentMediaType === 'manga' ? 'Chapter' : 'Episode'} ${currentNum}`);
+            this.autoUpdatedId = match.id; 
+
+            const field = currentMediaType === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
+
+            chrome.runtime.sendMessage({
+                action: "UPDATE_PROGRESS",
+                id: match.id,
+                mediaType: currentMediaType,
+                data: { [field]: currentNum }
+            }, (response) => {
+                if (response && response.success) {
+                    match.progress = currentNum;
+                    DataManager.invalidateCache();
+                    
+                    const progressText = document.getElementById('malProgressText');
+                    if (progressText) {
+                        const prefix = currentMediaType === 'manga' ? 'Ch' : 'Ep';
+                        progressText.innerText = `${prefix}: ${currentNum}`;
+                    }
+                }
+            });
+        }
+    }
+
     analyzeUrlForPanel(currentMediaType, panelVisible) {
         const urlTitle = TextNormalizer.getSlugFromUrl();
         if (!urlTitle || urlTitle.length <= 3) return false;
@@ -278,6 +308,10 @@ class MalController {
             match = matchArray.find(m => m.type === currentMediaType);
         }
         
+        if (match) {
+            this.attemptAutoUpdate(match, currentMediaType);
+        }
+
         if (match && !panelVisible) {
             UIManager.showPanel(match.rawTitle || urlTitle, match);
             return true;

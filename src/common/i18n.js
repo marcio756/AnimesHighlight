@@ -1,5 +1,3 @@
-// src/common/i18n.js
-
 /**
  * Internationalization (i18n) Service - SRP Application
  * @description Manages all static text across the extension to support multiple languages.
@@ -34,8 +32,11 @@ const DICTIONARY = {
         lblEnablePanel: "Show Floating Panel",
         lblEnableTransparency: "Transparent Panel (Hover to view)",
         lblSavePanelPos: "Save Panel Drag Position",
+        lblAutoUpdate: "Auto-Update Progress (URL Sync)",
         lblHighlights: "Statuses to Highlight:",
         lblColors: "Status Colors:",
+        
+        btnSaveSettings: "Save Settings",
         
         lblNextCheck: "Next check in:",
         lblMinutes: "minutes",
@@ -61,7 +62,6 @@ const DICTIONARY = {
         notifBtnWatch: "Watch Now",
         notifBtnMarkSeen: "Mark as Seen",
 
-        // Status Labels - Split for Context
         statusWatching: "WATCHING",
         statusReading: "READING",
         statusCompleted: "COMPLETED",
@@ -69,7 +69,6 @@ const DICTIONARY = {
         statusDropped: "DROPPED",
         statusPlanned: "PLANNED",
 
-        // Welcome Page
         welcomeTitle: "Welcome to MAL Highlighter",
         welcomeSubtitle: "Let's set up your extension in two simple steps.",
         welcomeStep1Title: "1. Connect your MyAnimeList",
@@ -106,8 +105,11 @@ const DICTIONARY = {
         lblEnablePanel: "Ativar Painel Flutuante",
         lblEnableTransparency: "Ativar Transparência no Painel",
         lblSavePanelPos: "Guardar Posição do Painel",
+        lblAutoUpdate: "Atualizar Progresso Autom.",
         lblHighlights: "Estados a Destacar:",
         lblColors: "Cores dos Estados:",
+        
+        btnSaveSettings: "Guardar Definições",
         
         lblNextCheck: "Próxima verificação em:",
         lblMinutes: "minutos",
@@ -133,7 +135,6 @@ const DICTIONARY = {
         notifBtnWatch: "Assistir Agora",
         notifBtnMarkSeen: "Marcar como Visto",
 
-        // Status Labels - Split for Context
         statusWatching: "A VER",
         statusReading: "A LER",
         statusCompleted: "CONCLUÍDO",
@@ -141,7 +142,6 @@ const DICTIONARY = {
         statusDropped: "DESISTIU",
         statusPlanned: "PLANEADO",
 
-        // Welcome Page
         welcomeTitle: "Bem-vindo ao Realçador MAL",
         welcomeSubtitle: "Vamos configurar a tua extensão em dois passos simples.",
         welcomeStep1Title: "1. Conecta o teu MyAnimeList",
