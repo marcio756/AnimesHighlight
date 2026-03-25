@@ -12,6 +12,9 @@ class MalController {
         this.isPanelEnabled = true; 
     }
 
+    /**
+     * Bootstraps the highlighter logic. Retrieves user preferences before starting.
+     */
     async init() {
         if (!PerformanceGuard.isRelevantPage()) return;
         
@@ -20,6 +23,8 @@ class MalController {
             this.isPanelEnabled = settings.panelEnabled !== false; 
             UIManager.setTransparency(settings.panelTransparent === true);
 
+            await UIManager.initLanguage();
+
             this.globalMediaMap = await DataManager.getUserList();
             this.startObserver();
         } catch (e) {
@@ -27,6 +32,10 @@ class MalController {
         }
     }
 
+    /**
+     * Queries the Jikan API as a fallback when an item appears to be the main focus but is not in the local map.
+     * @param {string} rawTitle - The extracted title from the DOM.
+     */
     searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled) return; 
         if (this.isSearching) return;
@@ -38,7 +47,6 @@ class MalController {
         this.isSearching = true;
         document.body.style.cursor = 'wait';
 
-        // O tipo de mídia inferido pelas tuas regras
         const currentMediaType = ContextAnalyzer.guessContentType();
 
         chrome.runtime.sendMessage({ 
@@ -53,13 +61,10 @@ class MalController {
                 let finalStatus = null;
                 let finalType = null;
 
-                // 1. Procurar nas respostas da API apenas itens que correspondam ao TIPO EXATO do site (Anime vs Manga)
                 for (const apiItem of response.results) {
-                    // Impede que um Anime seja aberto num site de Manga e vice-versa
                     if (apiItem.type !== currentMediaType) continue;
 
                     for (let [localTitle, localDataArray] of this.globalMediaMap.entries()) {
-                        // Correspondência Estrita no tipo de ficheiro local
                         const foundInList = localDataArray.find(v => v.id === apiItem.mal_id && v.type === currentMediaType);
                         
                         if (foundInList) {
@@ -67,7 +72,7 @@ class MalController {
                             finalStatus = foundInList.status;
                             finalType = foundInList.type;
                             
-                            // Auto-Aprendizagem de Sinónimos
+                            // Auto-learning Synonyms
                             if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
                                 SynonymDictionary.save(cleanQuery, localTitle);
                                 console.log(`[MAL Highlighter] Learned synonym: "${cleanQuery}" -> "${localTitle}"`);
@@ -79,7 +84,7 @@ class MalController {
                     if (bestMatch) break; 
                 }
 
-                // Fallback de pesquisa: Se não tiver na lista, tenta mostrar a info geral no painel
+                // Fallback: If not in list, show general info in the panel
                 if (!bestMatch) {
                     for (const apiItem of response.results) {
                         const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
@@ -98,23 +103,49 @@ class MalController {
         });
     }
 
+    /**
+     * Analyzes the DOM to orchestrate highlighting and panel triggering.
+     * @description Decomposed to enforce Single Responsibility Principle.
+     */
     processPage() {
-        const selector = 'a, h1, h2, h3, h4, h5, .title, .name, [class*="title"], [class*="nome"], article h3, li h3';
+        const isListingPage = ContextAnalyzer.isListingPage();
+        const currentMediaType = ContextAnalyzer.guessContentType();
+        
+        let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
+        
+        // 1. Scan internal DOM elements
+        let foundMainItem = this.scanDomElements(isListingPage, currentMediaType, panelVisible);
+
+        // 2. Scan URL Slug as a Fallback strategy if no main item was identified via DOM
+        if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
+            foundMainItem = this.analyzeUrlForPanel(currentMediaType, panelVisible);
+        }
+
+        // 3. Graceful hide if nothing matched
+        if (!foundMainItem) {
+            setTimeout(() => { if (!foundMainItem) UIManager.hidePanel(); }, 500);
+        }
+    }
+
+    /**
+     * Scans DOM candidates, applying borders and potentially triggering the info panel.
+     * @param {boolean} isListingPage - Flag to avoid treating directory items as main focus.
+     * @param {string} currentMediaType - Contextual media type.
+     * @param {boolean} panelVisible - Current state of the panel.
+     * @returns {boolean} True if the primary subject of the page was found.
+     */
+    scanDomElements(isListingPage, currentMediaType, panelVisible) {
+        // Extended selector targeting specific anime title classes natively
+        const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
         const candidates = document.querySelectorAll(selector);
         
-        let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible');
-        let foundMainItem = panelVisible; 
-
+        let foundMainItem = panelVisible;
         let processedCount = 0;
         const PROCESS_LIMIT = 500; 
-        
-        const currentMediaType = ContextAnalyzer.guessContentType();
         const pathName = window.location.pathname;
-        const isHomePage = pathName === '/' || pathName.length < 3; 
 
         for (const element of candidates) {
             if (processedCount > PROCESS_LIMIT) break;
-            
             if (element.closest('[data-mal-status]')) continue;
             if (element.offsetParent === null) continue; 
             
@@ -128,14 +159,14 @@ class MalController {
             if (!itemTitleRaw || itemTitleRaw.length < 3) continue;
 
             const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
-
             processedCount++;
 
             let matchArray = null;
             if (this.globalMediaMap.has(itemTitle)) {
                 matchArray = this.globalMediaMap.get(itemTitle);
             } else {
-                if (itemTitle.length < 50) {
+                // Critical Fix: Increased from 50 to 150 to support long Light Novel/Isekai titles
+                if (itemTitle.length < 150) {
                     for (let [malTitle, dataArray] of this.globalMediaMap) {
                         if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
                             matchArray = dataArray;
@@ -147,17 +178,17 @@ class MalController {
 
             let match = null;
             if (matchArray && matchArray.length > 0) {
-                // Correspondência ESTRITA: Só aplica destaque se o tipo coincidir. 
-                // Sem fallback para "|| matchArray[0]". Evita Chainsaw Man Anime a aparecer no Manga.
                 match = matchArray.find(m => m.type === currentMediaType);
             }
 
+            // Apply Borders Logic
             if (match) {
                 const card = UIManager.findCardContainer(element);
-                if (card) UIManager.applyVisuals(card, match.status);
+                if (card) UIManager.applyVisuals(card, match.status, match.type);
             }
 
-            if (this.isPanelEnabled && !foundMainItem && !isHomePage) {
+            // Floating Panel DOM Logic
+            if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
                 const tag = element.tagName;
                 const isHead1 = tag === 'H1'; 
                 const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -176,47 +207,53 @@ class MalController {
                 }
             }
         }
+        return foundMainItem;
+    }
 
-        if (this.isPanelEnabled && !foundMainItem && !isHomePage) {
-            const urlTitle = TextNormalizer.getSlugFromUrl();
-            if (urlTitle && urlTitle.length > 3) {
-                const normUrlTitle = TextNormalizer.normalize(urlTitle);
-                if (!UI_BLOCKLIST.some(term => normUrlTitle.includes(term))) {
-                     
-                     const resolvedUrlTitle = SynonymDictionary.resolve(normUrlTitle);
-                     let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
-                     
-                     if (!matchArray) {
-                         for (let [malTitle, dataArray] of this.globalMediaMap) {
-                             if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
-                                 matchArray = dataArray;
-                                 break;
-                             }
-                         }
-                     }
+    /**
+     * Checks if the URL slug corresponds to an anime/manga to force-open the panel.
+     * @param {string} currentMediaType - Contextual media type.
+     * @param {boolean} panelVisible - Current state of the panel.
+     * @returns {boolean} True if the panel was successfully triggered via URL.
+     */
+    analyzeUrlForPanel(currentMediaType, panelVisible) {
+        const urlTitle = TextNormalizer.getSlugFromUrl();
+        if (!urlTitle || urlTitle.length <= 3) return false;
 
-                     let match = null;
-                     if (matchArray && matchArray.length > 0) {
-                         // Correspondência Estrita Fallback URL
-                         match = matchArray.find(m => m.type === currentMediaType);
-                     }
-                     
-                     if (match && !panelVisible) {
-                         UIManager.showPanel(urlTitle, match);
-                         foundMainItem = true;
-                     } else if (!panelVisible) {
-                         this.searchAndShowPanel(urlTitle);
-                         foundMainItem = true;
-                     }
+        const normUrlTitle = TextNormalizer.normalize(urlTitle);
+        if (UI_BLOCKLIST.some(term => normUrlTitle.includes(term))) return false;
+
+        const resolvedUrlTitle = SynonymDictionary.resolve(normUrlTitle);
+        let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
+        
+        if (!matchArray) {
+            for (let [malTitle, dataArray] of this.globalMediaMap) {
+                if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
+                    matchArray = dataArray;
+                    break;
                 }
             }
         }
 
-        if (!foundMainItem) {
-            setTimeout(() => { if (!foundMainItem) UIManager.hidePanel(); }, 500);
+        let match = null;
+        if (matchArray && matchArray.length > 0) {
+            match = matchArray.find(m => m.type === currentMediaType);
         }
+        
+        if (match && !panelVisible) {
+            UIManager.showPanel(urlTitle, match);
+            return true;
+        } else if (!panelVisible) {
+            this.searchAndShowPanel(urlTitle);
+            return true;
+        }
+
+        return false;
     }
 
+    /**
+     * Initializes the MutationObserver to handle dynamically loaded content.
+     */
     startObserver() {
         if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
         
@@ -232,6 +269,10 @@ class MalController {
     }
 }
 
+// --- BOOT PROCESS ---
 const app = new MalController();
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => app.init());
-else app.init();
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => app.init());
+} else {
+    app.init();
+}
