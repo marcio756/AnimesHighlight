@@ -2,70 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <style>
-        body { width: 320px; padding: 0; margin: 0; font-family: 'Segoe UI', sans-serif; color: #333; background: #fff; }
-        
-        .header { background: #2e51a2; padding: 15px 15px 0 15px; color: white; }
-        h3 { margin: 0 0 10px 0; font-size: 16px; }
-        
-        .tabs { display: flex; gap: 2px; }
-        .tab-btn {
-            background: rgba(255,255,255,0.3);
-            border: none;
-            color: rgba(255,255,255,0.8);
-            padding: 8px 10px;
-            cursor: pointer;
-            border-top-left-radius: 4px;
-            border-top-right-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            flex: 1;
-        }
-        .tab-btn.active { background: #fff; color: #2e51a2; }
-        
-        .content { padding: 15px; }
-        .tab-pane { display: none; }
-        .tab-pane.active { display: block; }
-
-        .input-group { text-align: left; margin-bottom: 15px; }
-        label { font-size: 11px; color: #666; font-weight: bold; display: block; margin-bottom: 4px; }
-        input[type="text"], select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; }
-        
-        button.action-btn { 
-            width: 100%; padding: 10px; background: #2e51a2; 
-            color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px;
-            transition: background 0.2s;
-        }
-        button.action-btn:hover { background: #223f82; }
-        button.action-btn:disabled { background: #ccc; cursor: not-allowed; }
-
-        .profile-area { margin-top: 15px; display: none; padding: 10px; background: #f4f4f4; border-radius: 8px; text-align: center; }
-        .avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #2e51a2; }
-        .welcome { font-size: 13px; font-weight: 600; margin-top: 5px; }
-        
-        .status { margin-top: 10px; font-size: 11px; min-height: 15px; text-align: center; }
-        .error { color: #d32f2f; }
-        .success { color: #2e7d32; }
-        
-        .monitor-info { font-size: 11px; color: #777; line-height: 1.4; margin-bottom: 10px; background: #f9f9f9; padding: 8px; border-radius: 4px; border-left: 3px solid #f1c83e; }
-
-        .notif-list { list-style: none; padding: 0; margin: 0; max-height: 250px; overflow-y: auto; }
-        .notif-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; gap: 4px; cursor: pointer; transition: background 0.2s ease; }
-        .notif-item:hover { background: #eef2ff; } 
-        .notif-item:last-child { border-bottom: none; }
-        .notif-header { display: flex; justify-content: space-between; align-items: center; }
-        .notif-title { font-weight: bold; font-size: 12px; color: #333; }
-        .notif-date { font-size: 10px; color: #999; }
-        .notif-ep { font-size: 11px; color: #2e51a2; font-weight: 600; }
-        
-        .empty-state { text-align: center; padding: 20px; color: #999; font-size: 12px; }
-        
-        .clear-btn-container { padding-top: 10px; border-top: 1px solid #eee; margin-top: 10px; }
-        .btn-danger { background: #d32f2f !important; }
-        .btn-danger:hover { background: #b71c1c !important; }
-
-        .footer { padding: 10px; font-size: 9px; color: #999; text-align: center; border-top: 1px solid #eee; }
-    </style>
+    <link rel="stylesheet" href="src/popup/popup.css">
 </head>
 <body>
     <div class="header">
@@ -94,9 +31,7 @@
         </div>
 
         <div id="tab-monitor" class="tab-pane">
-            <div class="monitor-info" data-i18n="infoMonitor">
-                Checks the site every 15 minutes for new episodes.
-            </div>
+            <div class="monitor-info" data-i18n="infoMonitor"></div>
             <div class="input-group">
                 <label data-i18n="lblMonitorUrl">Site URL to Monitor:</label>
                 <input type="text" id="monitorUrl" placeholder="https://example.com/latest">
@@ -112,7 +47,7 @@
         <div id="tab-notifications" class="tab-pane">
             <div id="notifContainer">
                 <ul id="notificationList" class="notif-list"></ul>
-                <div id="emptyState" class="empty-state" style="display:none;" data-i18n="emptyHistory">No new releases detected yet.</div>
+                <div id="emptyState" class="empty-state" style="display:none;" data-i18n="emptyHistory"></div>
             </div>
             
             <div class="clear-btn-container">
@@ -135,7 +70,7 @@
             </div>
             <div class="input-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
                 <input type="checkbox" id="panelTransparent" style="width: auto;">
-                <label for="panelTransparent" style="margin: 0; cursor: pointer;" data-i18n="lblEnableTransparency">Transparent Panel (Hover to view)</label>
+                <label for="panelTransparent" style="margin: 0; cursor: pointer;" data-i18n="lblEnableTransparency">Transparent Panel</label>
             </div>
 
             <button id="saveSettingsBtn" class="action-btn" style="margin-top: 15px;" data-i18n="btnSaveSettings">Save Settings</button>
@@ -143,8 +78,10 @@
         </div>
     </div>
     
-    <div class="footer">Universal Version 1.5</div>
-    <script src="i18n.js"></script>
-    <script src="popup.js"></script>
+    <div class="footer">Universal Version 1.6</div>
+    
+    <script src="src/common/i18n.js"></script>
+    <script src="src/popup/ui.js"></script>
+    <script src="src/popup/main.js"></script>
 </body>
 </html>
