@@ -6,6 +6,7 @@
 class UIManager {
     static isPanelTransparent = false;
     static currentLanguage = 'en';
+    static savePanelPosition = false;
 
     static async initLanguage() {
         this.currentLanguage = await I18nService.getCurrentLang();
@@ -13,6 +14,10 @@ class UIManager {
 
     static setTransparency(transparent) {
         this.isPanelTransparent = transparent;
+    }
+    
+    static setSavePosition(savePos) {
+        this.savePanelPosition = savePos;
     }
 
     /**
@@ -61,13 +66,17 @@ class UIManager {
         panel.id = 'malControlPanel';
         panel.className = 'mal-control-panel';
         panel.innerHTML = `
-            <div class="mal-panel-header" id="malPanelTitle">Loading...</div>
+            <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="justify-content: center; margin-bottom: 15px;">
                 <span id="malStatusText" style="font-size: 12px; color: #aaa; font-weight: 600;">${I18nService.get('statusChecking', this.currentLanguage)}</span>
             </div>
             <button class="mal-update-btn" id="malOpenBtn">${I18nService.get('panelOpenBtn', this.currentLanguage)}</button>
         `;
         document.body.appendChild(panel);
+        
+        // Initialize dragging behavior using the newly abstracted logic
+        const header = document.getElementById('malPanelTitle');
+        DraggableService.init(panel, header, this.savePanelPosition);
     }
 
     static async showPanel(itemName, data) {

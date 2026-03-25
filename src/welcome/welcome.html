@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome to MAL Highlighter</title>
+    <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+    <div class="welcome-container">
+        <div class="welcome-header">
+            <img src="../../icon.png" alt="Logo" class="welcome-logo">
+            <h1 data-i18n="welcomeTitle">Welcome to MAL Highlighter</h1>
+            <p data-i18n="welcomeSubtitle">Let's set up your extension in two simple steps.</p>
+        </div>
+        
+        <div class="welcome-steps">
+            <div class="step-card">
+                <h3 data-i18n="welcomeStep1Title">1. Connect your MyAnimeList</h3>
+                <p data-i18n="welcomeStep1Desc">Click the extension icon in your browser toolbar, enter your MyAnimeList username, and click 'Verify & Save'.</p>
+            </div>
+            
+            <div class="step-card">
+                <h3 data-i18n="welcomeStep2Title">2. Enjoy the Magic</h3>
+                <p data-i18n="welcomeStep2Desc">Visit your favorite anime or manga sites. The extension will automatically highlight covers based on your list and show a floating panel you can drag around!</p>
+            </div>
+        </div>
+
+        <button id="startBtn" class="welcome-btn" data-i18n="welcomeStartBtn">Close and Start</button>
+    </div>
+
+    <script src="../common/i18n.js"></script>
+    <script src="welcome.js"></script>
+</body>
+</html>

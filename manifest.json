@@ -3,7 +3,7 @@
   "name": "Universal MAL Highlighter",
   "version": "1.6",
   "description": "Automatically highlights anime/manga cards and monitors new releases.",
-  "permissions": ["storage", "alarms", "notifications"],
+  "permissions": ["storage", "alarms", "notifications", "tabs"],
   "host_permissions": [
     "<all_urls>"
   ],
@@ -24,6 +24,7 @@
         "src/common/i18n.js",
         "src/content/utils.js",
         "src/content/data.js",
+        "src/content/drag.js",
         "src/content/ui.js",
         "src/content/main.js"
       ],

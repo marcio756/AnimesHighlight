@@ -1,6 +1,6 @@
 /**
  * Main Service Worker Bootstrapper
- * @description Loads dependencies and binds browser events.
+ * @description Loads dependencies and binds browser events. Orchestrates initialization logic.
  */
 
 try { 
@@ -58,7 +58,11 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 
 // Lifecycle Hooks
 chrome.runtime.onStartup.addListener(() => ReleaseMonitorService.setupAlarm());
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
     ReleaseMonitorService.setupAlarm();
     chrome.storage.local.remove('seenEpisodes'); 
+    
+    if (details.reason === 'install') {
+        chrome.tabs.create({ url: 'src/welcome/welcome.html' });
+    }
 });

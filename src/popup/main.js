@@ -1,6 +1,6 @@
 /**
  * Main Controller for Popup
- * @description Orchestrates user settings, storage, and I18n translations.
+ * @description Orchestrates user settings, storage, and I18n translations. Includes storage bindings for visual highlights configuration.
  */
 document.addEventListener('DOMContentLoaded', async () => {
     let currentLang = await I18nService.getCurrentLang();
@@ -33,6 +33,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const langSelect = document.getElementById('langSelect');
     const checkPanelEnabled = document.getElementById('panelEnabled');
     const checkPanelTrans = document.getElementById('panelTransparent');
+    const checkSavePanelPos = document.getElementById('savePanelPos');
+    const hlStatusCheckboxes = document.querySelectorAll('.hl-status');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
 
@@ -47,7 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initial Storage Load
     chrome.storage.local.get([
         'malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled', 
-        'extensionLang', 'panelEnabled', 'panelTransparent'
+        'extensionLang', 'panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses'
     ], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
@@ -59,6 +61,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
         if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
+        if (res.savePanelPos !== undefined) checkSavePanelPos.checked = res.savePanelPos;
+        
+        if (res.highlightStatuses) {
+            hlStatusCheckboxes.forEach(cb => {
+                cb.checked = res.highlightStatuses.includes(parseInt(cb.value));
+            });
+        }
     });
 
     // Profile Save Flow
@@ -118,11 +127,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         const selectedLang = langSelect.value;
         const pEnabled = checkPanelEnabled.checked;
         const pTrans = checkPanelTrans.checked;
+        const sPos = checkSavePanelPos.checked;
+
+        const activeHighlights = Array.from(hlStatusCheckboxes)
+                                    .filter(cb => cb.checked)
+                                    .map(cb => parseInt(cb.value));
 
         chrome.storage.local.set({ 
             extensionLang: selectedLang,
             panelEnabled: pEnabled,
-            panelTransparent: pTrans
+            panelTransparent: pTrans,
+            savePanelPos: sPos,
+            highlightStatuses: activeHighlights
         }, () => {
             currentLang = selectedLang;
             I18nService.translateDOM(currentLang); 

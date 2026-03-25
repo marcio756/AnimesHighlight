@@ -29,6 +29,8 @@ const DICTIONARY = {
         
         lblEnablePanel: "Show Floating Panel",
         lblEnableTransparency: "Transparent Panel (Hover to view)",
+        lblSavePanelPos: "Save Panel Drag Position",
+        lblHighlights: "Statuses to Highlight:",
         
         statusChecking: "Checking...",
         statusNotInList: "NOT IN LIST",
@@ -48,7 +50,16 @@ const DICTIONARY = {
         statusCompleted: "COMPLETED",
         statusOnHold: "ON HOLD",
         statusDropped: "DROPPED",
-        statusPlanned: "PLANNED"
+        statusPlanned: "PLANNED",
+
+        // Welcome Page
+        welcomeTitle: "Welcome to MAL Highlighter",
+        welcomeSubtitle: "Let's set up your extension in two simple steps.",
+        welcomeStep1Title: "1. Connect your MyAnimeList",
+        welcomeStep1Desc: "Click the extension icon in your browser toolbar, enter your MyAnimeList username, and click 'Verify & Save'.",
+        welcomeStep2Title: "2. Enjoy the Magic",
+        welcomeStep2Desc: "Visit your favorite anime or manga sites. The extension will automatically highlight covers based on your list and show a floating panel you can drag around!",
+        welcomeStartBtn: "Close and Start"
     },
     pt: {
         appTitle: "Realçador MAL",
@@ -75,6 +86,8 @@ const DICTIONARY = {
         
         lblEnablePanel: "Ativar Painel Flutuante",
         lblEnableTransparency: "Ativar Transparência no Painel",
+        lblSavePanelPos: "Guardar Posição do Painel",
+        lblHighlights: "Estados a Destacar:",
         
         statusChecking: "A verificar...",
         statusNotInList: "NÃO ESTÁ NA LISTA",
@@ -94,7 +107,16 @@ const DICTIONARY = {
         statusCompleted: "CONCLUÍDO",
         statusOnHold: "EM ESPERA",
         statusDropped: "DESISTIU",
-        statusPlanned: "PLANEADO"
+        statusPlanned: "PLANEADO",
+
+        // Welcome Page
+        welcomeTitle: "Bem-vindo ao Realçador MAL",
+        welcomeSubtitle: "Vamos configurar a tua extensão em dois passos simples.",
+        welcomeStep1Title: "1. Conecta o teu MyAnimeList",
+        welcomeStep1Desc: "Clica no ícone da extensão na barra do teu navegador, insere o teu nome de utilizador do MyAnimeList e clica em 'Verificar e Guardar'.",
+        welcomeStep2Title: "2. Desfruta da Magia",
+        welcomeStep2Desc: "Visita os teus sites favoritos de anime ou manga. A extensão irá realçar automaticamente as capas com base na tua lista e mostrar um painel flutuante que podes arrastar!",
+        welcomeStartBtn: "Fechar e Começar"
     }
 };
 

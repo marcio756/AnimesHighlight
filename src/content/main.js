@@ -1,6 +1,6 @@
 /**
  * Main Controller Workflow
- * @description Initializes the extension observer and acts as the orchestrator between Data, UI, Utilities, and Dictionary.
+ * @description Initializes the extension observer and acts as the orchestrator between Data, UI, Utilities, and Dictionary. Retrieves and processes dynamic user settings.
  */
 
 class MalController {
@@ -10,6 +10,7 @@ class MalController {
         this.debounceTimer = null;
         this.isSearching = false;
         this.isPanelEnabled = true; 
+        this.activeHighlights = [1, 2, 3, 4, 6]; // Default: All enabled
     }
 
     /**
@@ -21,9 +22,15 @@ class MalController {
         try {
             await SynonymDictionary.init(); // Essential: Wait for global dictionary load
             
-            const settings = await chrome.storage.local.get(['panelEnabled', 'panelTransparent']);
+            const settings = await chrome.storage.local.get(['panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses']);
             this.isPanelEnabled = settings.panelEnabled !== false; 
+            
+            if (settings.highlightStatuses) {
+                this.activeHighlights = settings.highlightStatuses;
+            }
+
             UIManager.setTransparency(settings.panelTransparent === true);
+            UIManager.setSavePosition(settings.savePanelPos === true);
 
             await UIManager.initLanguage();
 
@@ -193,7 +200,10 @@ class MalController {
 
             if (match) {
                 const card = UIManager.findCardContainer(element);
-                if (card) UIManager.applyVisuals(card, match.status, match.type);
+                // Valida as preferências do utilizador para Highlights
+                if (card && this.activeHighlights.includes(match.status)) {
+                    UIManager.applyVisuals(card, match.status, match.type);
+                }
             }
 
             if (this.isPanelEnabled && !foundMainItem && !isListingPage) {
