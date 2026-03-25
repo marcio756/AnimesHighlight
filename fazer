@@ -1,4 +1,4 @@
-1. Funcionalidades Novas (Features)
+1. Funcionalidades Novas (Features) - FEITO
 Quick-Add & Edit no Painel Flutuante: Em vez de apenas um botão "Open MyAnimeList", o painel deveria permitir clicar num botão "+" para incrementar o número do episódio/capítulo diretamente na extensão, refletindo a alteração na API do MAL via OAuth2.
 Sincronização Bidirecional (Sync-Back): Se o ReleaseMonitor deteta e te notifica de um episódio e tu clicas na notificação, a extensão devia perguntar automaticamente: "Queres marcar o episódio 10 como visto no MAL?".
 

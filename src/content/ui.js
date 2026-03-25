@@ -66,11 +66,22 @@ class UIManager {
         panel.className = 'mal-control-panel';
         panel.innerHTML = `
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
-            <div class="mal-control-row" style="justify-content: space-between; margin-bottom: 15px;">
-                <span id="malStatusText" style="font-size: 12px; color: #aaa; font-weight: 600;">${I18nService.get('statusChecking', this.currentLanguage)}</span>
-                <div id="malProgressWrap" style="display: none; align-items: center; gap: 5px;">
-                    <span id="malProgressText" style="font-size: 11px; color: #ddd;"></span>
-                    <button id="malQuickAddBtn" class="mal-mini-btn" title="${I18nService.get('btnQuickAdd', this.currentLanguage)}">+</button>
+            <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <select id="malStatusSelect" class="mal-status-dropdown">
+                        <option value="watching">Watching</option>
+                        <option value="completed">Completed</option>
+                        <option value="on_hold">On Hold</option>
+                        <option value="dropped">Dropped</option>
+                        <option value="plan_to_watch">Plan to Watch</option>
+                    </select>
+                </div>
+                <div id="malProgressWrap" style="display: none; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 5px 8px; border-radius: 4px;">
+                    <span id="malProgressText" style="font-size: 11px; color: #ddd; font-weight: bold;"></span>
+                    <div style="display: flex; gap: 4px;">
+                        <button id="malQuickDecBtn" class="mal-mini-btn" style="background: #a12f31;">-</button>
+                        <button id="malQuickAddBtn" class="mal-mini-btn" style="background: #2db039;">+</button>
+                    </div>
                 </div>
             </div>
             <button class="mal-update-btn" id="malOpenBtn">${I18nService.get('panelOpenBtn', this.currentLanguage)}</button>
@@ -85,67 +96,76 @@ class UIManager {
         await this.createPanel();
         const panel = document.getElementById('malControlPanel');
         const titleEl = document.getElementById('malPanelTitle');
-        const statusEl = document.getElementById('malStatusText');
+        const statusSelect = document.getElementById('malStatusSelect');
         const btn = document.getElementById('malOpenBtn');
         const progressWrap = document.getElementById('malProgressWrap');
         const progressText = document.getElementById('malProgressText');
         const quickAddBtn = document.getElementById('malQuickAddBtn');
+        const quickDecBtn = document.getElementById('malQuickDecBtn');
         
         titleEl.innerText = itemName.substring(0, 30) + (itemName.length > 30 ? '...' : '');
         
-        if (data && data.status && STATUS_MAP[data.status]) {
-            const styleInfo = STATUS_MAP[data.status];
-            
-            let labelKey = styleInfo.labelKey;
+        if (data && data.status) {
+            // Map numeric status to MAL API string
+            const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
+            statusSelect.value = statusMap[data.status] || 'plan_to_watch';
+            statusSelect.disabled = false;
+
             const mediaType = data.type || ContextAnalyzer.guessContentType();
-            if (data.status === 1) {
-                labelKey = (mediaType === 'manga') ? 'statusReading' : 'statusWatching';
-            }
 
-            statusEl.innerText = I18nService.get(labelKey, this.currentLanguage);
-            statusEl.style.color = styleInfo.color;
-
-            // Integrar Controlador de Progresso e Quick-Add
+            // Progress Controls Logic
             if (data.progress !== undefined) {
                 const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
+                const field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
+                
                 progressText.innerText = `${prefix}: ${data.progress}`;
                 progressWrap.style.display = 'flex';
                 
-                // Evita acumular Listeners e permite isolar a função
-                const newBtn = quickAddBtn.cloneNode(true);
-                quickAddBtn.parentNode.replaceChild(newBtn, quickAddBtn);
-                
-                newBtn.onclick = () => {
-                    newBtn.disabled = true;
-                    newBtn.innerText = '...';
-                    const nextVal = data.progress + 1;
+                const updateProgress = (newVal) => {
+                    if (newVal < 0) return;
+                    quickAddBtn.disabled = true;
+                    quickDecBtn.disabled = true;
                     
                     chrome.runtime.sendMessage({
                         action: "UPDATE_PROGRESS",
                         id: data.id,
                         mediaType: mediaType,
-                        progress: nextVal
+                        data: { [field]: newVal }
                     }, (response) => {
                         if (response && response.success) {
-                            data.progress = nextVal;
-                            progressText.innerText = `${prefix}: ${nextVal}`;
-                            newBtn.innerText = '✓';
-                            DataManager.invalidateCache(); // Força renovação da cache ao próximo recarregamento
-                            setTimeout(() => { newBtn.innerText = '+'; newBtn.disabled = false; }, 2000);
-                        } else {
-                            newBtn.innerText = 'X';
-                            newBtn.title = "OAuth Login Required";
-                            setTimeout(() => { newBtn.innerText = '+'; newBtn.disabled = false; }, 3000);
+                            data.progress = newVal;
+                            progressText.innerText = `${prefix}: ${newVal}`;
+                            DataManager.invalidateCache();
                         }
+                        quickAddBtn.disabled = false;
+                        quickDecBtn.disabled = false;
                     });
                 };
+
+                quickAddBtn.onclick = () => updateProgress(data.progress + 1);
+                quickDecBtn.onclick = () => updateProgress(data.progress - 1);
             } else {
                 progressWrap.style.display = 'none';
             }
 
+            // Status Change Logic
+            statusSelect.onchange = (e) => {
+                const newStatus = e.target.value;
+                statusSelect.disabled = true;
+                chrome.runtime.sendMessage({
+                    action: "UPDATE_PROGRESS",
+                    id: data.id,
+                    mediaType: mediaType,
+                    data: { status: newStatus }
+                }, (response) => {
+                    statusSelect.disabled = false;
+                    if (response && response.success) DataManager.invalidateCache();
+                });
+            };
+
         } else {
-            statusEl.innerText = I18nService.get('statusNotInList', this.currentLanguage);
-            statusEl.style.color = "#aaa";
+            statusSelect.innerHTML = `<option>${I18nService.get('statusNotInList', this.currentLanguage)}</option>`;
+            statusSelect.disabled = true;
             progressWrap.style.display = 'none';
         }
         
@@ -153,14 +173,10 @@ class UIManager {
             if (data && data.id) {
                 const mediaType = data.type || ContextAnalyzer.guessContentType();
                 window.open(`https://myanimelist.net/${mediaType}/${data.id}`, '_blank');
-            } else {
-                alert("Item not found on MyAnimeList.");
             }
         };
         
-        if (this.isPanelTransparent) panel.classList.add('mal-panel-transparent');
-        else panel.classList.remove('mal-panel-transparent');
-
+        panel.classList.toggle('mal-panel-transparent', this.isPanelTransparent);
         panel.classList.add('visible');
     }
 

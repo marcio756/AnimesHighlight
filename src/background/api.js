@@ -126,17 +126,16 @@ class MalService {
     }
 
     /**
-     * Updates user progress on MyAnimeList utilizing OAuth2.
+     * Updates user list entry on MyAnimeList utilizing OAuth2.
      * @param {number} id - Media ID.
      * @param {string} type - 'anime' or 'manga'.
-     * @param {number} progress - New episode or chapter number.
+     * @param {Object} params - The parameters to update (status, score, progress, etc).
      * @returns {Promise<Object>} Response from MAL API.
      */
-    static async updateListEntry(id, type, progress) {
+    static async updateListEntry(id, type, params) {
         try {
             const token = await AuthService.getAccessToken();
             const url = `https://api.myanimelist.net/v2/${type}/${id}/my_list_status`;
-            const bodyParam = type === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
             
             const response = await fetch(url, {
                 method: 'PATCH',
@@ -144,12 +143,14 @@ class MalService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
-                body: new URLSearchParams({
-                    [bodyParam]: progress
-                })
+                body: new URLSearchParams(params)
             });
 
-            if (!response.ok) throw new Error('Failed to update MAL list');
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("[MalService] MAL API Rejection:", errorData);
+                throw new Error('Failed to update MAL list');
+            }
             return await response.json();
         } catch (error) {
             console.error("[MalService] Error updating entry:", error);
