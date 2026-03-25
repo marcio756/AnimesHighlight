@@ -2,8 +2,7 @@
  * Authentication Service
  * @description Handles OAuth2 PKCE flow for MyAnimeList API, token storage, and refreshing.
  */
-class AuthService {
-    // Substitui pelos teus dados do painel do MyAnimeList
+export class AuthService {
     static CLIENT_ID = 'ea88ed2de2dce587ff8e3e5849c3cf9f';
     static CLIENT_SECRET = 'c892f9cf267d04c669a21529670913ab2db2c8c3968a4dcfa9d7075ca2c38a0f';
     
@@ -34,7 +33,6 @@ class AuthService {
                     return resolve(res.mal_access_token);
                 }
                 
-                // PKCE: MAL requires a code challenge. We'll use a 128 chars string.
                 const codeVerifier = this.generateRandomString(128);
                 const redirectUri = chrome.identity.getRedirectURL();
                 
@@ -66,10 +64,9 @@ class AuthService {
                     }
 
                     try {
-                        // Exchange code for token
                         const tokenPayload = {
                             client_id: this.CLIENT_ID,
-                            client_secret: this.CLIENT_SECRET, // Incluído para maior compatibilidade
+                            client_secret: this.CLIENT_SECRET,
                             code: code,
                             code_verifier: codeVerifier,
                             grant_type: 'authorization_code',
@@ -90,7 +87,7 @@ class AuthService {
                             console.log("[Auth] Token obtido com sucesso!");
                             await chrome.storage.local.set({ 
                                 mal_access_token: tokenData.access_token,
-                                mal_refresh_token: tokenData.refresh_token // Guardamos para o futuro
+                                mal_refresh_token: tokenData.refresh_token 
                             });
                             resolve(tokenData.access_token);
                         } else {

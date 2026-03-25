@@ -2,8 +2,9 @@
  * API Communication Layer
  * @description Handles fetching data from MyAnimeList and Jikan APIs, including intelligent background synonym sync and authenticated requests.
  */
+import { AuthService } from './auth.js';
 
-class ActiveItemsSynonymFetcher {
+export class ActiveItemsSynonymFetcher {
     /**
      * Synchronizes synonyms for active items (Watching/Reading) lazily to avoid API rate limits.
      * @param {Array<Object>} activeItems - Items currently marked with status === 1.
@@ -25,7 +26,7 @@ class ActiveItemsSynonymFetcher {
                 const res = await fetch(url);
                 
                 if (!res.ok) {
-                    if (res.status === 429) break; // Rate limit hit, abort current background sync
+                    if (res.status === 429) break; 
                     continue;
                 }
                 
@@ -45,9 +46,8 @@ class ActiveItemsSynonymFetcher {
                     updated = true;
                 }
                 
-                // Mark item as processed to prevent redundant API calls in future syncs
                 await chrome.storage.local.set({ [syncKey]: true });
-                await new Promise(resolve => setTimeout(resolve, 1500)); // Respect Jikan 3 requests/sec limit
+                await new Promise(resolve => setTimeout(resolve, 1500)); 
             } catch (error) {
                 console.error("[ActiveItemsSynonymFetcher] Error fetching synonyms:", error);
             }
@@ -59,7 +59,7 @@ class ActiveItemsSynonymFetcher {
     }
 }
 
-class MalService {
+export class MalService {
     static async fetchList(username, listType) {
         let allItems = [];
         let offset = 0;

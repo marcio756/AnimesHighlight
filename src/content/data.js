@@ -2,8 +2,9 @@
  * Data Storage and API Communication Layer
  * @description Isolates caching logic, self-learning dictionaries, and message passing.
  */
+import { TextNormalizer, CONFIG } from './utils.js';
 
-class SynonymDictionary {
+export class SynonymDictionary {
     static cache = {};
 
     /**
@@ -48,7 +49,7 @@ class SynonymDictionary {
     }
 }
 
-class DataManager {
+export class DataManager {
     static async getUsername() {
         return new Promise((resolve) => {
             chrome.storage.local.get(['malUsername'], (result) => {

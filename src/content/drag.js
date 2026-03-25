@@ -2,7 +2,7 @@
  * Interface Draggable Service
  * @description Provides smooth pointer-based drag and drop mechanics for UI components. Persists layout state if enabled by the user.
  */
-class DraggableService {
+export class DraggableService {
     /**
      * Binds drag events to a target element and its designated drag handle.
      * @param {HTMLElement} panel - The main element to be moved.
@@ -31,7 +31,7 @@ class DraggableService {
         handle.addEventListener('mousedown', dragStart);
 
         function dragStart(e) {
-            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
             
             isDragging = true;
             handle.style.cursor = 'grabbing';
@@ -63,7 +63,6 @@ class DraggableService {
             let newX = initialX + dx;
             let newY = initialY + dy;
 
-            // Boundaries protection
             newX = Math.max(0, Math.min(newX, window.innerWidth - panel.offsetWidth));
             newY = Math.max(0, Math.min(newY, window.innerHeight - panel.offsetHeight));
 

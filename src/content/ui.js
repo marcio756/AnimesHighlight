@@ -1,11 +1,13 @@
-// src/content/ui.js
-
 /**
  * UI Presentation Layer
  * @description Manages all DOM manipulations, CSS injections, and floating panel generation.
  */
+import { I18nService } from '../common/i18n.js';
+import { STATUS_MAP, ContextAnalyzer } from './utils.js';
+import { DataManager } from './data.js';
+import { DraggableService } from './drag.js';
 
-class UIManager {
+export class UIManager {
     static isPanelTransparent = false;
     static currentLanguage = 'en';
     static savePanelPosition = false;
@@ -63,7 +65,6 @@ class UIManager {
             const isCardTag = ['DIV', 'ARTICLE', 'LI', 'A', 'SECTION', 'UL'].includes(current.tagName);
             const hasCardClass = current.className.includes('item') || current.className.includes('card') || current.className.includes('poster');
             
-            // Verificação isolada: omitimos current.offsetWidth para não causar Layout Thrashing e forçar Reflow
             if ((hasImg || (isCardTag && hasCardClass)) && current.tagName !== 'BODY') {
                 return current;
             }
