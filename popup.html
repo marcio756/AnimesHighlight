@@ -1,37 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <style>
-        body { width: 300px; padding: 0; margin: 0; font-family: 'Segoe UI', sans-serif; color: #333; background: #fff; }
+        body { width: 320px; padding: 0; margin: 0; font-family: 'Segoe UI', sans-serif; color: #333; background: #fff; }
         
-        /* Header & Tabs */
         .header { background: #2e51a2; padding: 15px 15px 0 15px; color: white; }
         h3 { margin: 0 0 10px 0; font-size: 16px; }
         
-        .tabs { display: flex; gap: 5px; }
+        .tabs { display: flex; gap: 2px; }
         .tab-btn {
             background: rgba(255,255,255,0.3);
             border: none;
             color: rgba(255,255,255,0.8);
-            padding: 8px 15px;
+            padding: 8px 10px;
             cursor: pointer;
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             flex: 1;
         }
         .tab-btn.active { background: #fff; color: #2e51a2; }
         
-        /* Content Areas */
         .content { padding: 15px; }
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
 
-        /* Form Elements */
         .input-group { text-align: left; margin-bottom: 15px; }
         label { font-size: 11px; color: #666; font-weight: bold; display: block; margin-bottom: 4px; }
-        input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+        input[type="text"], select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; }
         
         button.action-btn { 
             width: 100%; padding: 10px; background: #2e51a2; 
@@ -41,7 +39,6 @@
         button.action-btn:hover { background: #223f82; }
         button.action-btn:disabled { background: #ccc; cursor: not-allowed; }
 
-        /* Profile Styles */
         .profile-area { margin-top: 15px; display: none; padding: 10px; background: #f4f4f4; border-radius: 8px; text-align: center; }
         .avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #2e51a2; }
         .welcome { font-size: 13px; font-weight: 600; margin-top: 5px; }
@@ -50,23 +47,11 @@
         .error { color: #d32f2f; }
         .success { color: #2e7d32; }
         
-        /* Monitor Styles */
         .monitor-info { font-size: 11px; color: #777; line-height: 1.4; margin-bottom: 10px; background: #f9f9f9; padding: 8px; border-radius: 4px; border-left: 3px solid #f1c83e; }
 
-        /* Notification History Styles */
-        .notif-list { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
-        
-        .notif-item { 
-            padding: 10px; 
-            border-bottom: 1px solid #eee; 
-            display: flex; 
-            flex-direction: column; 
-            gap: 4px; 
-            cursor: pointer; /* Indica clicável */
-            transition: background 0.2s ease;
-        }
-        .notif-item:hover { background: #eef2ff; } /* Efeito visual ao passar o rato */
-        
+        .notif-list { list-style: none; padding: 0; margin: 0; max-height: 250px; overflow-y: auto; }
+        .notif-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; gap: 4px; cursor: pointer; transition: background 0.2s ease; }
+        .notif-item:hover { background: #eef2ff; } 
         .notif-item:last-child { border-bottom: none; }
         .notif-header { display: flex; justify-content: space-between; align-items: center; }
         .notif-title { font-weight: bold; font-size: 12px; color: #333; }
@@ -84,21 +69,22 @@
 </head>
 <body>
     <div class="header">
-        <h3>MAL Highlighter</h3>
+        <h3 data-i18n="appTitle">MAL Highlighter</h3>
         <div class="tabs">
-            <button class="tab-btn active" data-tab="tab-profile">Profile</button>
-            <button class="tab-btn" data-tab="tab-monitor">Monitor</button>
-            <button class="tab-btn" data-tab="tab-notifications">History</button>
+            <button class="tab-btn active" data-tab="tab-profile" data-i18n="tabProfile">Profile</button>
+            <button class="tab-btn" data-tab="tab-monitor" data-i18n="tabMonitor">Monitor</button>
+            <button class="tab-btn" data-tab="tab-notifications" data-i18n="tabHistory">History</button>
+            <button class="tab-btn" data-tab="tab-settings" data-i18n="tabSettings">Settings</button>
         </div>
     </div>
 
     <div class="content">
         <div id="tab-profile" class="tab-pane active">
             <div class="input-group">
-                <label>MyAnimeList Username:</label>
+                <label data-i18n="lblUsername">MyAnimeList Username:</label>
                 <input type="text" id="username" placeholder="e.g. marcio756">
             </div>
-            <button id="saveBtn" class="action-btn">Verify & Save</button>
+            <button id="saveBtn" class="action-btn" data-i18n="btnVerifySave">Verify & Save</button>
             
             <div id="profileArea" class="profile-area">
                 <img id="avatar" class="avatar" src="" alt="Profile">
@@ -108,34 +94,47 @@
         </div>
 
         <div id="tab-monitor" class="tab-pane">
-            <div class="monitor-info">
-                Checks the site every 15 minutes for new episodes of animes you are currently "Watching".
+            <div class="monitor-info" data-i18n="infoMonitor">
+                Checks the site every 15 minutes for new episodes.
             </div>
             <div class="input-group">
-                <label>Anime Site URL to Monitor:</label>
+                <label data-i18n="lblMonitorUrl">Site URL to Monitor:</label>
                 <input type="text" id="monitorUrl" placeholder="https://example.com/latest">
             </div>
             <div class="input-group" style="display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="monitorEnabled" style="width: auto;">
-                <label for="monitorEnabled" style="margin: 0; cursor: pointer;">Enable Background Monitoring</label>
+                <label for="monitorEnabled" style="margin: 0; cursor: pointer;" data-i18n="lblEnableMonitor">Enable Background Monitoring</label>
             </div>
-            <button id="saveMonitorBtn" class="action-btn">Save Settings</button>
+            <button id="saveMonitorBtn" class="action-btn" data-i18n="btnSaveSettings">Save Settings</button>
             <div id="statusMonitor" class="status"></div>
         </div>
 
         <div id="tab-notifications" class="tab-pane">
             <div id="notifContainer">
                 <ul id="notificationList" class="notif-list"></ul>
-                <div id="emptyState" class="empty-state" style="display:none;">No new episodes detected yet.</div>
+                <div id="emptyState" class="empty-state" style="display:none;" data-i18n="emptyHistory">No new releases detected yet.</div>
             </div>
             
             <div class="clear-btn-container">
-                <button id="clearNotifsBtn" class="action-btn btn-danger">Clear History</button>
+                <button id="clearNotifsBtn" class="action-btn btn-danger" data-i18n="btnClearHistory">Clear History</button>
             </div>
+        </div>
+
+        <div id="tab-settings" class="tab-pane">
+            <div class="input-group">
+                <label data-i18n="lblLanguage">Extension Language:</label>
+                <select id="langSelect">
+                    <option value="en" data-i18n="langEn">English</option>
+                    <option value="pt" data-i18n="langPt">Português</option>
+                </select>
+            </div>
+            <button id="saveSettingsBtn" class="action-btn" data-i18n="btnSaveSettings">Save Settings</button>
+            <div id="statusSettings" class="status"></div>
         </div>
     </div>
     
-    <div class="footer">Universal Version 1.3</div>
+    <div class="footer">Universal Version 1.4</div>
+    <script src="i18n.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

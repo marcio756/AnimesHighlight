@@ -1,28 +1,29 @@
 /**
- * Background Service Worker - v35.0 (Smart Monitor & Deduplication)
- * Arquitetura: Services Pattern com Idempotência
+ * Background Service Worker - v37.0 (I18n Service Integration)
+ * Arquitetura: Services Pattern com Idempotência e Data Normalization
  */
 
-// --- CONFIGURAÇÃO ---
+// Import I18n Service dynamically for Service Worker
+try { importScripts("i18n.js"); } catch (e) { console.error("Could not load i18n", e); }
+
 const CONFIG = {
     ALARM_NAME: "MAL_MONITOR_CHECK",
-    CHECK_INTERVAL_MIN: 15, // Intervalo reduzido para cumprir o requisito de ~15min
-    HISTORY_LIMIT: 100 // Limite de histórico para não encher o storage
+    CHECK_INTERVAL_MIN: 15,
+    HISTORY_LIMIT: 100
 };
 
 // --- SERVICE: MAL DATA ---
 class MalService {
-    static async fetchUserList(username) {
+    static async fetchList(username, listType) {
         let allItems = [];
         let offset = 0;
         let hasMore = true;
 
-        // Limite de segurança (50.000)
         while (hasMore && offset < 50000) { 
-            const malUrl = `https://myanimelist.net/animelist/${username}/load.json?status=7&offset=${offset}&_t=${Date.now()}`;
+            const malUrl = `https://myanimelist.net/${listType}/${username}/load.json?status=7&offset=${offset}&_t=${Date.now()}`;
             try {
                 const res = await fetch(malUrl);
-                if (!res.ok) throw new Error("MAL API Error: Private or Invalid Profile");
+                if (!res.ok) throw new Error(`MAL API Error: Private or Invalid Profile for ${listType}`);
                 
                 const data = await res.json();
                 if (!Array.isArray(data)) throw new Error("Invalid Data Format");
@@ -32,11 +33,43 @@ class MalService {
                 if (data.length < 300) hasMore = false;
                 else offset += 300;
             } catch (error) {
-                console.error("[MalService] Error fetching list:", error);
-                hasMore = false; // Stop on error
+                console.error(`[MalService] Error fetching ${listType}:`, error);
+                hasMore = false; 
             }
         }
         return allItems;
+    }
+
+    static async fetchAllUserItems(username) {
+        try {
+            const [animeList, mangaList] = await Promise.all([
+                this.fetchList(username, 'animelist'),
+                this.fetchList(username, 'mangalist')
+            ]);
+
+            const normalizedAnimes = animeList.map(item => ({
+                id: item.anime_id,
+                title: item.anime_title,
+                status: item.status,
+                score: item.score,
+                type: 'anime',
+                num_watched_episodes: item.num_watched_episodes || 0
+            }));
+
+            const normalizedMangas = mangaList.map(item => ({
+                id: item.manga_id,
+                title: item.manga_title,
+                status: item.status,
+                score: item.score,
+                type: 'manga',
+                num_read_chapters: item.num_read_chapters || 0
+            }));
+
+            return [...normalizedAnimes, ...normalizedMangas];
+        } catch (error) {
+            console.error("[MalService] Error combining lists:", error);
+            throw error;
+        }
     }
 }
 
@@ -46,7 +79,6 @@ class ReleaseMonitorService {
     static async setupAlarm() {
         const { monitorEnabled } = await chrome.storage.local.get('monitorEnabled');
         
-        // Limpar alarme anterior para garantir atualização do intervalo
         await chrome.alarms.clear(CONFIG.ALARM_NAME);
 
         if (monitorEnabled) {
@@ -60,12 +92,10 @@ class ReleaseMonitorService {
     }
 
     static async checkNewReleases() {
-        // Obter configurações e o histórico de episódios já vistos
         const store = await chrome.storage.local.get(['malUsername', 'monitorUrl', 'seenEpisodes']);
         
         const username = store.malUsername;
         const monitorUrl = store.monitorUrl;
-        // Estrutura do seenEpisodes: { "anime_id_12345": [10, 11, 12], "anime_id_999": [1] }
         let seenEpisodes = store.seenEpisodes || {}; 
 
         if (!username || !monitorUrl) return;
@@ -73,37 +103,28 @@ class ReleaseMonitorService {
         try {
             console.log(`[Monitor] A verificar: ${monitorUrl}`);
             
-            // 1. Obter conteúdo do site e lista do utilizador em paralelo (Performance)
-            const [htmlText, animeList] = await Promise.all([
+            const [htmlText, allItems] = await Promise.all([
                 this.fetchSiteContent(monitorUrl),
-                MalService.fetchUserList(username)
+                MalService.fetchAllUserItems(username)
             ]);
 
-            const watchingList = animeList.filter(a => a.status === 1); // 1 = Watching
+            const watchingAnimeList = allItems.filter(a => a.status === 1 && a.type === 'anime'); 
             let notificationsQueue = [];
             let stateChanged = false;
 
-            // 2. Iterar lista de animes a ver
-            for (const anime of watchingList) {
+            for (const anime of watchingAnimeList) {
                 const nextEp = anime.num_watched_episodes + 1;
-                const animeId = anime.anime_id;
+                const animeId = anime.id;
 
-                // Verificar se este episódio específico JÁ foi processado antes (Deduplicação)
-                if (this.isEpisodeSeen(seenEpisodes, animeId, nextEp)) {
-                    continue; 
-                }
+                if (this.isEpisodeSeen(seenEpisodes, animeId, nextEp)) continue; 
 
-                // 3. Detetar no HTML
-                if (this.detectRelease(htmlText, anime.anime_title, nextEp)) {
-                    notificationsQueue.push(`${anime.anime_title} - Ep ${nextEp}`);
-                    
-                    // Marcar como visto para nunca mais notificar este episódio
+                if (this.detectRelease(htmlText, anime.title, nextEp)) {
+                    notificationsQueue.push(`${anime.title} - Ep ${nextEp}`);
                     this.markEpisodeAsSeen(seenEpisodes, animeId, nextEp);
                     stateChanged = true;
                 }
             }
 
-            // 4. Se houver novidades GENUÍNAS, notificar e guardar estado
             if (notificationsQueue.length > 0) {
                 await this.sendNotification(notificationsQueue);
             }
@@ -117,8 +138,6 @@ class ReleaseMonitorService {
         }
     }
 
-    // --- Helpers de Estado (Novos) ---
-
     static isEpisodeSeen(seenMap, animeId, episode) {
         if (!seenMap[animeId]) return false;
         return seenMap[animeId].includes(episode);
@@ -126,22 +145,19 @@ class ReleaseMonitorService {
 
     static markEpisodeAsSeen(seenMap, animeId, episode) {
         if (!seenMap[animeId]) seenMap[animeId] = [];
-        // Guardamos apenas os últimos 5 episódios para poupar memória, assumindo que não voltam atrás
         if (!seenMap[animeId].includes(episode)) {
             seenMap[animeId].push(episode);
             if (seenMap[animeId].length > 5) seenMap[animeId].shift(); 
         }
     }
 
-    // --- Helpers Utilitários ---
-
     static async fetchSiteContent(url) {
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 15000); // 15s timeout
+        const id = setTimeout(() => controller.abort(), 15000);
         try {
             const response = await fetch(url, { 
                 signal: controller.signal,
-                cache: "no-store" // Importante: Forçar nova versão da página
+                cache: "no-store" 
             });
             clearTimeout(id);
             return await response.text();
@@ -158,7 +174,6 @@ class ReleaseMonitorService {
 
         try {
             const escapedTitle = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-            // Regex ajustada para apanhar variações comuns e newlines
             const pattern = new RegExp(`${escapedTitle}[\\s\\S]{0,150}?\\b(ep|episodio|episode|e)?\\s*0*${episodeNumber}\\b`, "i");
             return pattern.test(cleanHtml);
         } catch (e) {
@@ -167,14 +182,17 @@ class ReleaseMonitorService {
     }
 
     static async sendNotification(items) {
+        // Obter idioma local e usar I18nService
+        const lang = await I18nService.getCurrentLang();
+        
         const message = items.length === 1 
-            ? `Novo Episódio: ${items[0]}`
-            : `${items.length} Novos Episódios Disponíveis!`;
+            ? `${I18nService.get('notifNew', lang)}: ${items[0]}`
+            : `${items.length} ${I18nService.get('notifMultiple', lang)}`;
 
         chrome.notifications.create({
             type: 'basic',
             iconUrl: 'icon.png',
-            title: 'MAL Highlighter Monitor',
+            title: I18nService.get('notifTitle', lang),
             message: message,
             priority: 2
         });
@@ -202,18 +220,19 @@ class ReleaseMonitorService {
 
 // --- EVENT LISTENERS ---
 
-// 1. Messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_MAL_LIST") {
-        MalService.fetchUserList(request.username)
+        MalService.fetchAllUserItems(request.username)
             .then(data => sendResponse({ success: true, data: data }))
             .catch(err => sendResponse({ success: false, error: err.message }));
         return true; 
     }
 
-    if (request.action === "SEARCH_ANIME") {
+    if (request.action === "SEARCH_ITEM") {
         const query = encodeURIComponent(request.title);
-        fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=5`)
+        const itemType = request.itemType || 'anime'; 
+        
+        fetch(`https://api.jikan.moe/v4/${itemType}?q=${query}&limit=5`)
             .then(res => res.json())
             .then(data => {
                 if (data.data && data.data.length > 0) sendResponse({ success: true, results: data.data });
@@ -225,20 +244,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === "UPDATE_MONITORING") {
         ReleaseMonitorService.setupAlarm();
-        // Opcional: Correr verificação imediata ao salvar
         ReleaseMonitorService.checkNewReleases(); 
         sendResponse({ success: true });
     }
 });
 
-// 2. Alarms
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === CONFIG.ALARM_NAME) {
         ReleaseMonitorService.checkNewReleases();
     }
 });
 
-// 3. Notification Click
 chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.storage.local.get('monitorUrl', (result) => {
         if (result.monitorUrl) {
@@ -248,10 +264,8 @@ chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.notifications.clear(notificationId);
 });
 
-// 4. Lifecycle
 chrome.runtime.onStartup.addListener(() => ReleaseMonitorService.setupAlarm());
 chrome.runtime.onInstalled.addListener(() => {
     ReleaseMonitorService.setupAlarm();
-    // Limpar cache antigo para evitar conflitos na nova versão
     chrome.storage.local.remove('seenEpisodes'); 
 });

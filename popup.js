@@ -1,5 +1,9 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // UI References
+document.addEventListener('DOMContentLoaded', async () => {
+    // --- STATE MANAGEMENT ---
+    let currentLang = await I18nService.getCurrentLang();
+    I18nService.translateDOM(currentLang);
+
+    // --- UI REFERENCES ---
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
     
@@ -22,7 +26,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyStateEl = document.getElementById('emptyState');
     const clearNotifsBtn = document.getElementById('clearNotifsBtn');
 
-    // --- TABS ---
+    // Settings
+    const langSelect = document.getElementById('langSelect');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const statusSettings = document.getElementById('statusSettings');
+
+    // --- TABS LOGIC ---
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
@@ -39,13 +48,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- INIT ---
-    chrome.storage.local.get(['malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled'], (res) => {
+    chrome.storage.local.get(['malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled', 'extensionLang'], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
             if (res.malAvatar) showProfile(res.malUsername, res.malAvatar);
         }
         if (res.monitorUrl) inputUrl.value = res.monitorUrl;
         if (res.monitorEnabled !== undefined) checkEnabled.checked = res.monitorEnabled;
+        if (res.extensionLang) langSelect.value = res.extensionLang;
     });
 
     // --- PROFILE LOGIC ---
@@ -53,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const username = inputUser.value.trim();
         if (!username) return;
 
-        updateStatus(statusProfile, "Verifying...", "");
+        updateStatus(statusProfile, I18nService.get('statusChecking', currentLang), "");
         saveProfileBtn.disabled = true;
         profileArea.style.display = 'none';
 
@@ -66,18 +76,19 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: username }, (malResponse) => {
                 if (malResponse && malResponse.success) {
                     chrome.storage.local.set({ malUsername: username, malAvatar: imageUrl }, () => {
-                        updateStatus(statusProfile, "Saved successfully!", "success");
+                        updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
                         showProfile(username, imageUrl);
                         saveProfileBtn.disabled = false;
-                        localStorage.removeItem('mal_v31_full_list'); 
+                        // Clear content cache to force refetch with new user
+                        localStorage.removeItem('mal_v33_full_list'); 
                     });
                 } else {
-                    updateStatus(statusProfile, "Profile is private or API error.", "error");
+                    updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
                     saveProfileBtn.disabled = false;
                 }
             });
         } catch (error) {
-            updateStatus(statusProfile, "User not found.", "error");
+            updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
             saveProfileBtn.disabled = false;
         }
     });
@@ -88,13 +99,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const enabled = checkEnabled.checked;
         
         if (enabled && !isValidUrl(url)) {
-            updateStatus(statusMonitor, "Please enter a valid URL.", "error");
+            updateStatus(statusMonitor, I18nService.get('statusErrorUrl', currentLang), "error");
             return;
         }
 
         chrome.storage.local.set({ monitorUrl: url, monitorEnabled: enabled }, () => {
-            updateStatus(statusMonitor, "Settings saved!", "success");
+            updateStatus(statusMonitor, I18nService.get('statusSaved', currentLang), "success");
             chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
+        });
+    });
+
+    // --- SETTINGS LOGIC ---
+    saveSettingsBtn.addEventListener('click', () => {
+        const selectedLang = langSelect.value;
+        chrome.storage.local.set({ extensionLang: selectedLang }, () => {
+            currentLang = selectedLang;
+            I18nService.translateDOM(currentLang); // Update UI immediately
+            updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
+            
+            // Re-render other dynamic texts
+            if (emptyStateEl.style.display === 'block') {
+                emptyStateEl.innerText = I18nService.get('emptyHistory', currentLang);
+            }
         });
     });
 
@@ -130,13 +156,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.className = 'notif-item';
                 
-                // CLICK ACTION: Abre o site monitorizado
                 li.addEventListener('click', () => {
                     chrome.storage.local.get('monitorUrl', (res) => {
                         if (res.monitorUrl) {
                             chrome.tabs.create({ url: res.monitorUrl });
-                        } else {
-                            alert("Monitor URL not found in settings.");
                         }
                     });
                 });
@@ -154,7 +177,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     clearNotifsBtn.addEventListener('click', () => {
-        if(confirm("Clear all history?")) {
+        const msg = I18nService.get('confirmClear', currentLang);
+        if(confirm(msg)) {
             chrome.storage.local.set({ notificationLog: [] }, () => loadNotifications());
         }
     });

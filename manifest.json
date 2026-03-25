@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Universal MAL Highlighter",
-  "version": "1.1",
-  "description": "Automatically highlights anime cards and monitors new releases.",
+  "version": "1.4",
+  "description": "Automatically highlights anime/manga cards and monitors new releases.",
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [
     "<all_urls>"
@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["i18n.js", "content.js"],
       "css": ["styles.css"]
     }
   ]
