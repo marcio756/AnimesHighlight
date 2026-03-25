@@ -33,6 +33,12 @@ const DICTIONARY = {
         lblEnableTransparency: "Transparent Panel (Hover to view)",
         lblSavePanelPos: "Save Panel Drag Position",
         lblHighlights: "Statuses to Highlight:",
+        lblColors: "Status Colors:",
+        
+        lblNextCheck: "Next check in:",
+        lblMinutes: "minutes",
+        lblNow: "Checking now...",
+        lblNotScheduled: "Monitoring disabled.",
         
         statusChecking: "Checking...",
         statusNotInList: "NOT IN LIST",
@@ -96,6 +102,12 @@ const DICTIONARY = {
         lblEnableTransparency: "Ativar Transparência no Painel",
         lblSavePanelPos: "Guardar Posição do Painel",
         lblHighlights: "Estados a Destacar:",
+        lblColors: "Cores dos Estados:",
+        
+        lblNextCheck: "Próxima verificação em:",
+        lblMinutes: "minutos",
+        lblNow: "A verificar agora...",
+        lblNotScheduled: "Monitorização desativada.",
         
         statusChecking: "A verificar...",
         statusNotInList: "NÃO ESTÁ NA LISTA",

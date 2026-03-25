@@ -125,6 +125,13 @@ class ReleaseMonitorService {
     static async sendNotification(items) {
         const lang = await I18nService.getCurrentLang();
         
+        // INCREMENT AND SET BADGE COUNTER
+        const badgeStore = await chrome.storage.local.get('unreadCount');
+        let currentUnread = (badgeStore.unreadCount || 0) + items.length;
+        await chrome.storage.local.set({ unreadCount: currentUnread });
+        chrome.action.setBadgeText({ text: currentUnread.toString() });
+        chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); // Red circle
+        
         items.forEach(async item => {
             const notifId = `mal_notif_${item.id}_${item.nextEp}_${Date.now()}`;
             const message = `${item.title} - Ep ${item.nextEp}`;

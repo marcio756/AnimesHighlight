@@ -14,6 +14,22 @@ class UIManager {
         this.currentLanguage = await I18nService.getCurrentLang();
     }
 
+    /**
+     * Initializes custom CSS variables for user-defined themes.
+     * Prevents heavy style injections by updating the root properties.
+     */
+    static async initTheming() {
+        const res = await chrome.storage.local.get(['customColors']);
+        if (res.customColors) {
+            const root = document.documentElement;
+            if (res.customColors[1]) root.style.setProperty('--mal-color-1', res.customColors[1]);
+            if (res.customColors[2]) root.style.setProperty('--mal-color-2', res.customColors[2]);
+            if (res.customColors[3]) root.style.setProperty('--mal-color-3', res.customColors[3]);
+            if (res.customColors[4]) root.style.setProperty('--mal-color-4', res.customColors[4]);
+            if (res.customColors[6]) root.style.setProperty('--mal-color-6', res.customColors[6]);
+        }
+    }
+
     static setTransparency(transparent) {
         this.isPanelTransparent = transparent;
     }

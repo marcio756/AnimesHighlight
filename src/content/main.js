@@ -35,6 +35,7 @@ class MalController {
             UIManager.setSavePosition(settings.savePanelPos === true);
 
             await UIManager.initLanguage();
+            await UIManager.initTheming(); // NOVO: Injeta as cores personalizadas do utilizador
 
             this.globalMediaMap = await DataManager.getUserList();
             this.startObserver();

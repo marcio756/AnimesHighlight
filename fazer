@@ -2,7 +2,7 @@
 Quick-Add & Edit no Painel Flutuante: Em vez de apenas um botão "Open MyAnimeList", o painel deveria permitir clicar num botão "+" para incrementar o número do episódio/capítulo diretamente na extensão, refletindo a alteração na API do MAL via OAuth2.
 Sincronização Bidirecional (Sync-Back): Se o ReleaseMonitor deteta e te notifica de um episódio e tu clicas na notificação, a extensão devia perguntar automaticamente: "Queres marcar o episódio 10 como visto no MAL?".
 
-2. Melhorias de Interface (UI/UX) - A FAZER 1
+2. Melhorias de Interface (UI/UX) - FEITO
 Personalização de Cores (Theming): Nas Settings, permitir que o utilizador escolha a cor das bordas. Há daltónicos que não distinguem o verde do vermelho, ou utilizadores que preferem um estilo minimalista (ex: todas as bordas brancas com brilho).
 Feedback Visual de Monitorização: No popup da extensão, mostrar o momento exato da "Próxima Verificação de Lançamentos" (ex: "A verificar novamente em 3 minutos..."), para que o utilizador saiba que o script em background está vivo e a funcionar.
 Badge Dynamics (Ícone): Quando o background.js deteta 3 episódios novos, alterar o ícone da extensão no browser para mostrar um pequeno círculo vermelho com o número "3" (usando a API chrome.action.setBadgeText).

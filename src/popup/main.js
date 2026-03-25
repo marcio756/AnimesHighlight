@@ -1,12 +1,16 @@
 /**
  * Main Controller for Popup
- * @description Orchestrates user settings, storage, and I18n translations. Includes storage bindings for visual highlights configuration.
+ * @description Orchestrates user settings, storage, I18n translations, and interactive UI states.
  */
 document.addEventListener('DOMContentLoaded', async () => {
+    // RESET BADGE ON OPEN (UX Best Practice)
+    chrome.action.setBadgeText({ text: "" });
+    chrome.storage.local.set({ unreadCount: 0 });
+
     let currentLang = await I18nService.getCurrentLang();
     I18nService.translateDOM(currentLang);
 
-    // Doms References
+    // Doms References - Tabs
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
     
@@ -38,25 +42,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
 
-    // Init UI Tabs
+    // Features: Colors
+    const colorPickers = {
+        1: document.getElementById('color1'),
+        2: document.getElementById('color2'),
+        3: document.getElementById('color3'),
+        4: document.getElementById('color4'),
+        6: document.getElementById('color6')
+    };
+
+    // ==========================================
+    // UI Interactions: Accordions & Dynamic Rows
+    // ==========================================
+    
+    // Collapsible Sections (Accordions)
+    document.querySelectorAll('.settings-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const card = header.parentElement;
+            card.classList.toggle('collapsed');
+        });
+    });
+
+    // Dynamic Visibility for Colors based on Highlight Status
+    const syncColorVisibility = () => {
+        hlStatusCheckboxes.forEach(cb => {
+            const statusId = cb.value;
+            const colorRow = document.getElementById(`color-row-${statusId}`);
+            if (colorRow) {
+                // Se a checkbox estiver inativa, esconde o row da cor correspondente
+                colorRow.style.display = cb.checked ? 'flex' : 'none';
+            }
+        });
+    };
+
+    // Escutar por mudanças nas checkboxes em tempo real
+    hlStatusCheckboxes.forEach(cb => {
+        cb.addEventListener('change', syncColorVisibility);
+    });
+
+    // ==========================================
+    // Core Logic Initialization
+    // ==========================================
+
     const loadNotifications = () => {
         chrome.storage.local.get('notificationLog', (result) => {
             PopupUI.renderNotifications(result.notificationLog || [], notifListEl, emptyStateEl, clearNotifsBtn);
         });
     };
-    PopupUI.initTabs(tabs, panes, loadNotifications);
+    const loadMonitorFeedback = () => {
+        PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
+    };
+
+    PopupUI.initTabs(tabs, panes, loadNotifications, loadMonitorFeedback);
 
     // Initial Storage Load
     chrome.storage.local.get([
         'malUsername', 'malAvatar', 'monitorUrl', 'monitorEnabled', 
-        'extensionLang', 'panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses'
+        'extensionLang', 'panelEnabled', 'panelTransparent', 'savePanelPos', 'highlightStatuses', 'customColors'
     ], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
             if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea);
         }
         if (res.monitorUrl) inputUrl.value = res.monitorUrl;
-        if (res.monitorEnabled !== undefined) checkEnabled.checked = res.monitorEnabled;
+        if (res.monitorEnabled !== undefined) {
+            checkEnabled.checked = res.monitorEnabled;
+            if (res.monitorEnabled) loadMonitorFeedback();
+        }
         if (res.extensionLang) langSelect.value = res.extensionLang;
         
         if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
@@ -68,6 +120,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 cb.checked = res.highlightStatuses.includes(parseInt(cb.value));
             });
         }
+
+        if (res.customColors) {
+            Object.keys(colorPickers).forEach(id => {
+                if (res.customColors[id]) colorPickers[id].value = res.customColors[id];
+            });
+        }
+
+        // Aplicar a lógica visual dinâmica após preencher os dados gravados
+        syncColorVisibility();
     });
 
     // Profile Save Flow
@@ -119,6 +180,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.storage.local.set({ monitorUrl: url, monitorEnabled: enabled }, () => {
             PopupUI.updateStatus(statusMonitor, I18nService.get('statusSaved', currentLang), "success");
             chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
+            if (enabled) loadMonitorFeedback();
         });
     });
 
@@ -133,12 +195,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     .filter(cb => cb.checked)
                                     .map(cb => parseInt(cb.value));
 
+        const activeColors = {
+            1: colorPickers[1].value,
+            2: colorPickers[2].value,
+            3: colorPickers[3].value,
+            4: colorPickers[4].value,
+            6: colorPickers[6].value
+        };
+
         chrome.storage.local.set({ 
             extensionLang: selectedLang,
             panelEnabled: pEnabled,
             panelTransparent: pTrans,
             savePanelPos: sPos,
-            highlightStatuses: activeHighlights
+            highlightStatuses: activeHighlights,
+            customColors: activeColors
         }, () => {
             currentLang = selectedLang;
             I18nService.translateDOM(currentLang); 

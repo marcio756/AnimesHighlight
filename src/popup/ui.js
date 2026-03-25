@@ -3,13 +3,16 @@
  * @description Handles all visual updates, tab switching, and data rendering for the extension popup.
  */
 class PopupUI {
+    static clockInterval = null;
+
     /**
      * Initializes Tab logic by binding buttons to their respective panes.
      * @param {NodeList} tabs - The tab buttons.
      * @param {NodeList} panes - The content panes.
      * @param {Function} onHistoryLoad - Callback to trigger when history tab is opened.
+     * @param {Function} onMonitorLoad - Callback to trigger when monitor tab is opened.
      */
-    static initTabs(tabs, panes, onHistoryLoad) {
+    static initTabs(tabs, panes, onHistoryLoad, onMonitorLoad) {
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
                 const target = tab.getAttribute('data-tab');
@@ -27,8 +30,42 @@ class PopupUI {
                 if (target === 'tab-notifications' && onHistoryLoad) {
                     onHistoryLoad();
                 }
+
+                // Load monitor feedback if the monitor tab is selected
+                if (target === 'tab-monitor' && onMonitorLoad) {
+                    onMonitorLoad();
+                }
             });
         });
+    }
+
+    /**
+     * Renders real-time feedback for the background monitor alarm.
+     * @param {string} elementId - The ID of the container element.
+     * @param {string} currentLang - The currently selected language.
+     */
+    static renderAlarmFeedback(elementId, currentLang) {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+
+        const updateClock = async () => {
+            const alarm = await chrome.alarms.get("MAL_MONITOR_CHECK");
+            if (!alarm) {
+                el.innerText = I18nService.get('lblNotScheduled', currentLang);
+                return;
+            }
+            const diffMs = alarm.scheduledTime - Date.now();
+            if (diffMs <= 0) {
+                el.innerText = I18nService.get('lblNow', currentLang);
+            } else {
+                const mins = Math.ceil(diffMs / 60000);
+                el.innerText = `${I18nService.get('lblNextCheck', currentLang)} ${mins} ${I18nService.get('lblMinutes', currentLang)}`;
+            }
+        };
+
+        updateClock();
+        if (this.clockInterval) clearInterval(this.clockInterval);
+        this.clockInterval = setInterval(updateClock, 10000); // Polling every 10 seconds to save CPU
     }
 
     /**
@@ -51,11 +88,6 @@ class PopupUI {
 
     /**
      * Displays the user profile information in the UI.
-     * @param {string} username - MAL Username.
-     * @param {string} avatarUrl - URL for the user's avatar.
-     * @param {HTMLElement} avatarEl - The image element for the avatar.
-     * @param {HTMLElement} textEl - The element for the welcome text.
-     * @param {HTMLElement} container - The profile section container.
      */
     static showProfile(username, avatarUrl, avatarEl, textEl, container) {
         if (!container || !avatarEl || !textEl) return;
@@ -66,10 +98,6 @@ class PopupUI {
 
     /**
      * Renders the list of detected releases in the History tab.
-     * @param {Array} logs - Array of notification log objects.
-     * @param {HTMLElement} listEl - The UL element to contain the list.
-     * @param {HTMLElement} emptyEl - The element to show if the list is empty.
-     * @param {HTMLElement} clearBtn - The button to clear history.
      */
     static renderNotifications(logs, listEl, emptyEl, clearBtn) {
         if (!listEl) return;
@@ -98,49 +126,6 @@ class PopupUI {
     }
 
     /**
-     * Renders detailed media information (Quick-Add logic).
-     * Note: Requires an element with id="anime-details" in popup.html.
-     * @param {Object} entry - The MAL API entry data.
-     */
-    static renderEntry(entry) {
-        const container = document.getElementById('anime-details');
-        if (!container || !entry) return;
-
-        const isAnime = entry.node.main_picture !== undefined;
-        const currentProgress = isAnime ? (entry.list_status?.num_episodes_watched || 0) : (entry.list_status?.num_chapters_read || 0);
-        const total = isAnime ? (entry.node.num_episodes || '?') : (entry.node.num_chapters || '?');
-        const status = entry.list_status?.status || 'plan_to_watch';
-
-        container.innerHTML = `
-            <div class="entry-card">
-                <img src="${entry.node.main_picture?.medium}" alt="${entry.node.title}">
-                <div class="entry-info">
-                    <h3>${entry.node.title}</h3>
-                    <div class="status-selector">
-                        <select id="status-update">
-                            <option value="watching" ${status === 'watching' ? 'selected' : ''}>Watching</option>
-                            <option value="completed" ${status === 'completed' ? 'selected' : ''}>Completed</option>
-                            <option value="on_hold" ${status === 'on_hold' ? 'selected' : ''}>On Hold</option>
-                            <option value="dropped" ${status === 'dropped' ? 'selected' : ''}>Dropped</option>
-                            <option value="plan_to_watch" ${status === 'plan_to_watch' ? 'selected' : ''}>Plan to Watch</option>
-                        </select>
-                    </div>
-                    <div class="progress-control">
-                        <button id="dec-progress" class="btn-small">-</button>
-                        <span id="progress-display">${currentProgress} / ${total}</span>
-                        <button id="inc-progress" class="btn-small">+</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Event Listeners for Quick-Edit
-        document.getElementById('dec-progress').onclick = () => this.updateMalProgress(entry.node.id, currentProgress - 1, isAnime);
-        document.getElementById('inc-progress').onclick = () => this.updateMalProgress(entry.node.id, currentProgress + 1, isAnime);
-        document.getElementById('status-update').onchange = (e) => this.updateMalStatus(entry.node.id, e.target.value, isAnime);
-    }
-
-    /**
      * Communicates with background to update MAL progress.
      */
     static async updateMalProgress(id, newValue, isAnime) {
@@ -154,7 +139,6 @@ class PopupUI {
             data: { [field]: newValue }
         }, (response) => {
             if (response && response.success) {
-                // Refresh data if renderEntry is being used
                 location.reload(); 
             }
         });

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="header">
+        <h3 data-i18n="appTitle">MAL Highlighter</h3>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-profile" data-i18n="tabProfile">Profile</button>
+            <button class="tab-btn" data-tab="tab-monitor" data-i18n="tabMonitor">Monitor</button>
+            <button class="tab-btn" data-tab="tab-notifications" data-i18n="tabHistory">History</button>
+            <button class="tab-btn" data-tab="tab-settings" data-i18n="tabSettings">Settings</button>
+        </div>
+    </div>
+
+    <div class="content">
+        <div id="tab-profile" class="tab-pane active">
+            <div class="input-group">
+                <label data-i18n="lblUsername">MyAnimeList Username:</label>
+                <input type="text" id="username" placeholder="e.g. marcio756">
+            </div>
+            <button id="saveBtn" class="action-btn" data-i18n="btnVerifySave">Verify & Save</button>
+            
+            <div id="profileArea" class="profile-area">
+                <img id="avatar" class="avatar" src="" alt="Profile">
+                <div class="welcome" id="welcomeText"></div>
+            </div>
+            <div id="statusProfile" class="status"></div>
+        </div>
+
+        <div id="tab-monitor" class="tab-pane">
+            <div class="monitor-info" data-i18n="infoMonitor"></div>
+            <div class="input-group">
+                <label data-i18n="lblMonitorUrl">Site URL to Monitor:</label>
+                <input type="text" id="monitorUrl" placeholder="https://example.com/latest">
+            </div>
+            <div class="modern-toggle-row">
+                <span data-i18n="lblEnableMonitor">Enable Background Monitoring</span>
+                <label class="switch">
+                    <input type="checkbox" id="monitorEnabled">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            
+            <div id="nextCheckDisplay" style="margin: 10px 0; font-size: 11px; font-weight: bold; color: #2e51a2; text-align: center;"></div>
+
+            <button id="saveMonitorBtn" class="action-btn" data-i18n="btnSaveSettings">Save Settings</button>
+            <div id="statusMonitor" class="status"></div>
+        </div>
+
+        <div id="tab-notifications" class="tab-pane">
+            <div id="notifContainer">
+                <ul id="notificationList" class="notif-list"></ul>
+                <div id="emptyState" class="empty-state" style="display:none;" data-i18n="emptyHistory"></div>
+            </div>
+            
+            <div class="clear-btn-container">
+                <button id="clearNotifsBtn" class="action-btn btn-danger" data-i18n="btnClearHistory">Clear History</button>
+            </div>
+        </div>
+
+        <div id="tab-settings" class="tab-pane">
+            
+            <div class="settings-card">
+                <div class="settings-header">
+                    <span>Geral & Painel Flutuante</span>
+                    <span class="chevron">▼</span>
+                </div>
+                <div class="settings-content">
+                    <div class="input-group">
+                        <label data-i18n="lblLanguage">Extension Language:</label>
+                        <select id="langSelect" class="modern-select">
+                            <option value="en" data-i18n="langEn">English</option>
+                            <option value="pt" data-i18n="langPt">Português</option>
+                        </select>
+                    </div>
+
+                    <div class="modern-toggle-row">
+                        <span data-i18n="lblEnablePanel">Show Floating Panel</span>
+                        <label class="switch">
+                            <input type="checkbox" id="panelEnabled" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="modern-toggle-row">
+                        <span data-i18n="lblEnableTransparency">Transparent Panel</span>
+                        <label class="switch">
+                            <input type="checkbox" id="panelTransparent">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="modern-toggle-row">
+                        <span data-i18n="lblSavePanelPos">Save Panel Drag Position</span>
+                        <label class="switch">
+                            <input type="checkbox" id="savePanelPos">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <div class="settings-header">
+                    <span data-i18n="lblHighlights">Statuses to Highlight:</span>
+                    <span class="chevron">▼</span>
+                </div>
+                <div class="settings-content">
+                    <div class="modern-toggle-row">
+                        <span data-i18n="statusWatching">Watching</span>
+                        <label class="switch"><input type="checkbox" class="hl-status" value="1" checked><span class="slider round"></span></label>
+                    </div>
+                    <div class="modern-toggle-row">
+                        <span data-i18n="statusCompleted">Completed</span>
+                        <label class="switch"><input type="checkbox" class="hl-status" value="2" checked><span class="slider round"></span></label>
+                    </div>
+                    <div class="modern-toggle-row">
+                        <span data-i18n="statusOnHold">On Hold</span>
+                        <label class="switch"><input type="checkbox" class="hl-status" value="3" checked><span class="slider round"></span></label>
+                    </div>
+                    <div class="modern-toggle-row">
+                        <span data-i18n="statusDropped">Dropped</span>
+                        <label class="switch"><input type="checkbox" class="hl-status" value="4" checked><span class="slider round"></span></label>
+                    </div>
+                    <div class="modern-toggle-row">
+                        <span data-i18n="statusPlanned">Planned</span>
+                        <label class="switch"><input type="checkbox" class="hl-status" value="6" checked><span class="slider round"></span></label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <div class="settings-header">
+                    <span data-i18n="lblColors">Status Colors:</span>
+                    <span class="chevron">▼</span>
+                </div>
+                <div class="settings-content">
+                    <div id="color-row-1" class="modern-color-row">
+                        <span data-i18n="statusWatching">Watching</span>
+                        <input type="color" id="color1" class="modern-color-picker" value="#2db039">
+                    </div>
+                    <div id="color-row-2" class="modern-color-row">
+                        <span data-i18n="statusCompleted">Completed</span>
+                        <input type="color" id="color2" class="modern-color-picker" value="#26448f">
+                    </div>
+                    <div id="color-row-3" class="modern-color-row">
+                        <span data-i18n="statusOnHold">On Hold</span>
+                        <input type="color" id="color3" class="modern-color-picker" value="#f1c83e">
+                    </div>
+                    <div id="color-row-4" class="modern-color-row">
+                        <span data-i18n="statusDropped">Dropped</span>
+                        <input type="color" id="color4" class="modern-color-picker" value="#a12f31">
+                    </div>
+                    <div id="color-row-6" class="modern-color-row">
+                        <span data-i18n="statusPlanned">Planned</span>
+                        <input type="color" id="color6" class="modern-color-picker" value="#787878">
+                    </div>
+                </div>
+            </div>
+
+            <button id="saveSettingsBtn" class="action-btn" style="margin-top: 15px;" data-i18n="btnSaveSettings">Save Settings</button>
+            <div id="statusSettings" class="status"></div>
+        </div>
+    </div>
+    
+    <div class="footer">Universal Version 1.7</div>
+    
+    <script src="../common/i18n.js"></script>
+    <script src="ui.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
