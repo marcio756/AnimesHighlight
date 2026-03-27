@@ -1,12 +1,30 @@
 /**
  * Popup UI Manager
- * @description Handles all visual updates, dynamic DOM generation, and Optimistic UI rendering.
+ * @description Handles visual updates, Optimistic UI rendering, Context Transitions, and Progress Illusions.
  */
 import { I18nService } from '../common/i18n.js';
+
+/**
+ * ProgressService ensures visual feedback during latent network operations (Progress Illusion).
+ */
+export class ProgressService {
+    static start() {
+        const bar = document.getElementById('globalProgress');
+        if (bar) bar.classList.add('loading');
+    }
+
+    static stop() {
+        const bar = document.getElementById('globalProgress');
+        if (bar) bar.classList.remove('loading');
+    }
+}
 
 export class PopupUI {
     static clockInterval = null;
 
+    /**
+     * Initializes Tab Navigation with Context Transition support via CSS classes.
+     */
     static initTabs(tabs, panes, onHistoryLoad, onMonitorLoad) {
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
@@ -15,6 +33,7 @@ export class PopupUI {
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
 
+                // Trigger Context Transition via active class assignment
                 panes.forEach(pane => {
                     pane.classList.toggle('active', pane.id === target);
                 });
@@ -26,8 +45,7 @@ export class PopupUI {
     }
 
     /**
-     * Initializes the accordion logic for settings cards.
-     * @description Binds click events to settings headers to toggle the 'collapsed' class.
+     * Initializes accordion logic (Continuity Illusion without leaving the context).
      */
     static initSettingsAccordions() {
         const headers = document.querySelectorAll('.settings-header');
@@ -79,13 +97,18 @@ export class PopupUI {
         }, 3000);
     }
 
-    static showProfile(username, avatarUrl, avatarEl, textEl, container) {
+    static showProfile(username, avatarUrl, avatarEl, textEl, container, skeletonEl) {
         if (!container || !avatarEl || !textEl) return;
+        if (skeletonEl) skeletonEl.style.display = 'none';
+        
         avatarEl.src = avatarUrl;
         textEl.innerText = `Welcome, ${username}!`;
         container.style.display = 'flex';
     }
 
+    /**
+     * Renders site list utilizing Optimistic UI principles.
+     */
     static renderSitesList(sites, listEl, emptyEl, callbacks) {
         listEl.innerHTML = "";
         
@@ -96,7 +119,7 @@ export class PopupUI {
 
         emptyEl.style.display = 'none';
 
-        sites.forEach((site, index) => {
+        sites.forEach((site) => {
             if (site.isSkeleton) {
                 listEl.innerHTML += `
                     <li class="skeleton-card">
@@ -114,21 +137,32 @@ export class PopupUI {
                     <span class="site-url">${site.url}</span>
                 </div>
                 <div class="site-actions">
-                    <label class="switch" style="transform: scale(0.8); margin: 0;">
+                    <label class="switch" style="transform: scale(0.85); margin: 0;">
                         <input type="checkbox" class="toggle-site" data-id="${site.id}" ${site.enabled ? 'checked' : ''}>
                         <span class="slider round"></span>
                     </label>
-                    <button class="btn-icon delete-site" data-id="${site.id}" title="Remove Site">🗑️</button>
+                    <button class="btn-icon delete-site" data-id="${site.id}" title="Remove Site" style="border:none; background:transparent; cursor:pointer; font-size:16px;">🗑️</button>
                 </div>
             `;
             listEl.appendChild(li);
         });
 
+        // Optimistic UI bindings
         listEl.querySelectorAll('.toggle-site').forEach(btn => {
-            btn.addEventListener('change', (e) => callbacks.onToggle(e.target.dataset.id, e.target.checked));
+            btn.addEventListener('change', (e) => {
+                const li = e.target.closest('.site-card');
+                // Optimistically update view
+                li.classList.toggle('disabled', !e.target.checked);
+                callbacks.onToggle(e.target.dataset.id, e.target.checked);
+            });
         });
+
         listEl.querySelectorAll('.delete-site').forEach(btn => {
-            btn.addEventListener('click', (e) => callbacks.onDelete(e.target.dataset.id));
+            btn.addEventListener('click', (e) => {
+                const li = e.target.closest('.site-card');
+                li.style.opacity = '0.3'; // Optimistic delete feedback
+                setTimeout(() => callbacks.onDelete(e.target.dataset.id), 150);
+            });
         });
     }
 
@@ -171,21 +205,21 @@ export class PopupUI {
             const li = document.createElement('li');
             const date = new Date(log.date).toLocaleString();
             const actionUrl = log.url || `https://myanimelist.net/${log.type || 'anime'}/${log.id || ''}`;
-            const siteTag = log.siteName ? `<span class="notif-tag">${log.siteName}</span>` : '';
+            const siteTag = log.siteName ? `<span class="notif-tag" style="background:var(--bg-main); color:var(--primary-color); padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold; border:1px solid var(--border-color);">${log.siteName}</span>` : '';
             
             li.innerHTML = `
-                <div class="notif-item" style="position: relative; padding-right: 20px;">
-                    <button class="delete-notif-btn" data-index="${originalIndex}" style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: #a12f31; font-size: 16px; cursor: pointer; line-height: 1; padding: 0;" title="Remover notificação">&times;</button>
+                <div class="notif-item" style="position: relative; padding-right: 25px;">
+                    <button class="delete-notif-btn" data-index="${originalIndex}" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #e53e3e; font-size: 18px; cursor: pointer; line-height: 1; padding: 0; transition: transform 0.2s;" title="Remover">&times;</button>
                     
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <span class="notif-text" style="font-size: 13px; font-weight: 600; color: var(--text-main); padding-right: 15px;">${log.text}</span>
+                    <div style="display: flex; flex-direction: column; gap: 8px; width:100%;">
+                        <span class="notif-text" style="font-size: 13px; font-weight: 700; color: var(--text-main); padding-right: 15px;">${log.text}</span>
                         
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div style="display: flex; gap: 6px; align-items: center;">
                                 <span class="notif-date" style="font-size: 10px; color: var(--text-muted);">${date}</span>
                                 ${siteTag}
                             </div>
-                            <a href="${actionUrl}" target="_blank" class="open-notif-btn" data-index="${originalIndex}" style="background-color: #2db039; color: white; padding: 4px 12px; border-radius: 4px; font-size: 11px; text-decoration: none; font-weight: bold; box-shadow: 0 2px 4px rgba(45, 176, 57, 0.2);">Abrir</a>
+                            <a href="${actionUrl}" target="_blank" class="open-notif-btn" data-index="${originalIndex}" style="background-color: #48bb78; color: white; padding: 4px 12px; border-radius: 4px; font-size: 11px; text-decoration: none; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;">Abrir</a>
                         </div>
                     </div>
                 </div>
@@ -195,8 +229,14 @@ export class PopupUI {
 
         const handleRemove = (e) => {
             const idx = parseInt(e.target.getAttribute('data-index'));
-            logs.splice(idx, 1);
-            if (onUpdateLogs) onUpdateLogs(logs);
+            const li = e.target.closest('.notif-item');
+            li.style.opacity = '0';
+            li.style.transform = 'translateX(20px)';
+            
+            setTimeout(() => {
+                logs.splice(idx, 1);
+                if (onUpdateLogs) onUpdateLogs(logs);
+            }, 250); // Optimistic UI removal timing
         };
 
         listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));

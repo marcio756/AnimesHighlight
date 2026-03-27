@@ -1,9 +1,9 @@
 /**
  * Main Controller for Popup
- * @description Orchestrates user settings, storage, I18n translations, and Multi-Site logic.
+ * @description Orchestrates user settings, storage, I18n translations, and logic integration.
  */
 import { I18nService } from '../common/i18n.js';
-import { PopupUI } from './ui.js';
+import { PopupUI, ProgressService } from './ui.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     chrome.action.setBadgeText({ text: "" });
@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveProfileBtn = document.getElementById('saveBtn');
     const statusProfile = document.getElementById('statusProfile');
     const profileArea = document.getElementById('profileArea');
+    const profileSkeleton = document.getElementById('profileSkeleton');
     const avatar = document.getElementById('avatar');
     const welcomeText = document.getElementById('welcomeText');
 
@@ -121,20 +122,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     PopupUI.initTabs(tabs, panes, loadCoreData, loadCoreData);
     PopupUI.initSettingsAccordions(); 
 
-    // --- CLOUD SYNC LOGIC ---
+    // --- CLOUD SYNC LOGIC & OPTIMISTIC UI ---
     const updateSyncUI = (isLoggedIn, email) => {
         if (isLoggedIn) {
             syncStatusText.innerText = email || I18nService.get('syncLoggedIn', currentLang);
-            syncStatusText.style.color = '#2db039'; // Green status
+            syncStatusText.style.color = '#48bb78'; 
             syncActionBtn.innerText = I18nService.get('btnLogout', currentLang);
             syncActionBtn.className = "action-btn btn-danger";
-            syncWarningBox.style.display = 'none'; // Esconde aviso se já fez login
+            syncWarningBox.style.display = 'none'; 
         } else {
             syncStatusText.innerText = I18nService.get('syncNotLoggedIn', currentLang);
             syncStatusText.style.color = 'var(--text-muted)';
             syncActionBtn.innerText = I18nService.get('btnLogin', currentLang);
             syncActionBtn.className = "action-btn";
-            syncWarningBox.style.display = 'block'; // Mostra aviso
+            syncWarningBox.style.display = 'block'; 
         }
     };
 
@@ -144,10 +145,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     syncActionBtn.addEventListener('click', () => {
+        ProgressService.start();
         if (syncActionBtn.innerText === I18nService.get('btnLogout', currentLang)) {
             syncActionBtn.innerText = "...";
             chrome.runtime.sendMessage({ action: "SYNC_LOGOUT" }, (res) => {
                 updateSyncUI(false);
+                ProgressService.stop();
             });
         } else {
             syncActionBtn.innerText = "...";
@@ -157,6 +160,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     updateSyncUI(false);
                 }
+                ProgressService.stop();
             });
         }
     });
@@ -202,6 +206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
+            // Skeleton Screen Logic for adding site
             globalSites.push({ id: 'temp', isSkeleton: true });
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
             inputNewSiteUrl.value = "";
@@ -215,7 +220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     enabled: true
                 });
                 saveSitesState();
-            }, 500);
+            }, 400);
 
         } catch (e) {
             PopupUI.updateStatus(statusMonitor, I18nService.get('statusErrorUrl', currentLang), "error");
@@ -225,6 +230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputNewSiteUrl.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn.click(); });
     historySiteFilter.addEventListener('change', () => renderLogs());
 
+    // Optimistic Save
     saveSettingsBtn.addEventListener('click', () => {
         const selectedLang = langSelect.value;
         const pEnabled = checkPanelEnabled.checked;
@@ -238,6 +244,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             3: colorPickers[3].value, 4: colorPickers[4].value, 6: colorPickers[6].value
         };
 
+        // Optimistic UI change
+        saveSettingsBtn.innerText = "...";
+        saveSettingsBtn.disabled = true;
+
         chrome.storage.local.set({ 
             extensionLang: selectedLang, panelEnabled: pEnabled, panelTransparent: pTrans,
             savePanelPos: sPos, autoUpdateProgress: aUpdate, highlightStatuses: activeHighlights, customColors: activeColors
@@ -246,6 +256,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             I18nService.translateDOM(currentLang); 
             PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang); 
             PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
+            
+            saveSettingsBtn.innerText = I18nService.get('btnSaveSettings', currentLang);
+            saveSettingsBtn.disabled = false;
         });
     });
 
@@ -263,6 +276,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         PopupUI.updateStatus(statusProfile, I18nService.get('statusChecking', currentLang), "");
         saveProfileBtn.disabled = true;
         profileArea.style.display = 'none';
+        
+        // Ativar Skeleton & Progress Illusion
+        profileSkeleton.style.display = 'flex';
+        ProgressService.start();
 
         try {
             const response = await fetch(`https://api.jikan.moe/v4/users/${username}`);
@@ -271,19 +288,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             const imageUrl = data.data.images.jpg.image_url;
 
             chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: username }, (malResponse) => {
+                ProgressService.stop();
                 if (malResponse && malResponse.success) {
                     chrome.storage.local.set({ malUsername: username, malAvatar: imageUrl }, () => {
                         PopupUI.updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
-                        PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea);
+                        PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea, profileSkeleton);
                         saveProfileBtn.disabled = false;
                         localStorage.removeItem('mal_v35_full_list'); 
                     });
                 } else {
+                    profileSkeleton.style.display = 'none';
                     PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
                     saveProfileBtn.disabled = false;
                 }
             });
         } catch (error) {
+            ProgressService.stop();
+            profileSkeleton.style.display = 'none';
             PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
             saveProfileBtn.disabled = false;
         }

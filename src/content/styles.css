@@ -3,29 +3,52 @@
  * ==========================================
  */
 :root {
-    --mal-color-1: #2db039;
-    --mal-color-2: #26448f;
-    --mal-color-3: #f1c83e;
-    --mal-color-4: #a12f31;
-    --mal-color-6: #787878;
+    --mal-color-1: #48bb78; /* Verde Premium */
+    --mal-color-2: #2e51a2; /* Azul MAL Premium */
+    --mal-color-3: #ecc94b; /* Amarelo Premium */
+    --mal-color-4: #e53e3e; /* Vermelho Premium */
+    --mal-color-6: #a0aec0; /* Cinzento Premium */
+    
+    --mal-panel-bg: rgba(255, 255, 255, 0.85);
+    --mal-panel-blur: blur(12px);
+    --mal-panel-text: #2d3748;
+    --mal-panel-border: rgba(226, 232, 240, 0.8);
+    --mal-input-bg: rgba(255, 255, 255, 0.9);
+    --mal-progress-bg: rgba(237, 242, 247, 0.8);
+    --mal-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --mal-transition: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+[data-theme="dark"] {
+    --mal-panel-bg: rgba(26, 32, 44, 0.85);
+    --mal-panel-text: #e2e8f0;
+    --mal-panel-border: rgba(74, 85, 104, 0.6);
+    --mal-input-bg: rgba(45, 55, 72, 0.9);
+    --mal-progress-bg: rgba(23, 25, 35, 0.6);
+    --mal-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .mal-item-highlight {
     position: relative !important;
     box-sizing: border-box !important;
     z-index: 10 !important; 
-    transition: box-shadow 0.2s ease;
+    transition: transform 0.2s var(--mal-transition), box-shadow 0.2s var(--mal-transition);
+}
+
+.mal-item-highlight:hover {
+    transform: translateY(-2px);
 }
 
 .mal-item-highlight::after {
     content: attr(data-mal-label); 
     position: absolute;
     top: 0; right: 0;
-    color: white; font-size: 10px; font-family: 'Segoe UI', sans-serif;
-    padding: 3px 6px; border-bottom-left-radius: 4px;
-    font-weight: bold; text-transform: uppercase;
-    box-shadow: -1px 1px 2px rgba(0,0,0,0.5);
+    color: white; font-size: 10px; font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 4px 8px; border-bottom-left-radius: 6px;
+    font-weight: 700; text-transform: uppercase;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     z-index: 150; pointer-events: none; 
+    letter-spacing: 0.5px;
 }
 
 .mal-watching { box-shadow: inset 0 0 0 4px var(--mal-color-1) !important; }
@@ -33,74 +56,112 @@
 .mal-completed { box-shadow: inset 0 0 0 4px var(--mal-color-2) !important; }
 .mal-completed::after { background: var(--mal-color-2); }
 .mal-hold { box-shadow: inset 0 0 0 4px var(--mal-color-3) !important; }
-.mal-hold::after { background: var(--mal-color-3); color: #333; }
-.mal-dropped { box-shadow: inset 0 0 0 4px var(--mal-color-4) !important; filter: grayscale(100%); }
+.mal-hold::after { background: var(--mal-color-3); color: #1a202c; }
+.mal-dropped { box-shadow: inset 0 0 0 4px var(--mal-color-4) !important; filter: grayscale(80%); }
 .mal-dropped::after { background: var(--mal-color-4); }
 .mal-plan { box-shadow: inset 0 0 0 4px var(--mal-color-6) !important; }
 .mal-plan::after { background: var(--mal-color-6); }
 
 /* ==========================================
- * PARTE 2: PAINEL DE CONTROLO FLUTUANTE
+ * PARTE 2: PAINEL DE CONTROLO FLUTUANTE (Premium UI)
  * ==========================================
  */
-.mal-control-panel {
-    --mal-panel-bg: #ffffff;
-    --mal-panel-text: #333333;
-    --mal-panel-border: #e1e4e8;
-    --mal-input-bg: #f8f9fa;
-    --mal-progress-bg: #f1f3f5;
-}
-
-.mal-control-panel[data-theme="dark"] {
-    --mal-panel-bg: #1e1e1e;
-    --mal-panel-text: #ffffff;
-    --mal-panel-border: #333333;
-    --mal-input-bg: #333333;
-    --mal-progress-bg: #2a2a2a;
-}
-
 .mal-control-panel {
     position: fixed;
     bottom: 20px; right: 20px;
     background: var(--mal-panel-bg); 
+    backdrop-filter: var(--mal-panel-blur);
+    -webkit-backdrop-filter: var(--mal-panel-blur);
     color: var(--mal-panel-text);
-    padding: 15px; border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    padding: 16px; border-radius: 12px;
+    box-shadow: var(--mal-shadow);
     z-index: 2147483647; 
-    font-family: 'Segoe UI', sans-serif;
-    width: 220px; border: 1px solid var(--mal-panel-border);
-    opacity: 0; transform: translateY(20px);
-    transition: all 0.3s ease;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    width: 240px; 
+    border: 1px solid var(--mal-panel-border);
+    opacity: 0; transform: translateY(20px) scale(0.95);
+    transition: all 0.35s var(--mal-transition);
     display: none;
 }
 
-.mal-control-panel.visible { opacity: 1; transform: translateY(0); display: block; }
-.mal-control-panel.mal-panel-transparent { opacity: 0.4; }
+.mal-control-panel.visible { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+    display: block; 
+}
+
+.mal-control-panel.mal-panel-transparent { opacity: 0.3; transition: opacity 0.3s ease; }
 .mal-control-panel.mal-panel-transparent:hover { opacity: 1; }
 
 .mal-panel-header {
-    font-weight: bold; font-size: 14px;
+    font-weight: 700; font-size: 14px;
     margin-bottom: 12px; border-bottom: 1px solid var(--mal-panel-border);
-    padding-bottom: 5px; color: var(--mal-color-1);
+    padding-bottom: 8px; color: var(--mal-color-2);
+    cursor: grab;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+.mal-panel-header:active { cursor: grabbing; }
 
 .mal-status-dropdown {
     background: var(--mal-input-bg); 
     border: 1px solid var(--mal-panel-border); 
     color: var(--mal-panel-text);
-    border-radius: 4px; padding: 5px; font-size: 12px;
+    border-radius: 6px; padding: 8px; font-size: 12px; font-weight: 500;
     width: 100%; cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+}
+
+.mal-status-dropdown:focus {
+    border-color: var(--mal-color-2);
+    box-shadow: 0 0 0 2px rgba(46, 81, 162, 0.2);
+}
+
+.mal-progress-container {
+    display: flex; justify-content: space-between; align-items: center; 
+    background: var(--mal-progress-bg); padding: 6px 10px; 
+    border-radius: 6px; border: 1px solid var(--mal-panel-border);
+    transition: background-color 0.3s ease;
+}
+
+/* Animação visual de sucesso na Optimistic UI */
+.mal-progress-container.optimistic-success {
+    background: rgba(72, 187, 120, 0.2); /* Fundo verde momentâneo */
+}
+
+.mal-progress-text {
+    font-size: 12px; color: var(--mal-panel-text); font-weight: 700;
+    transition: transform 0.1s;
+}
+
+/* Efeito de "salto" no número */
+.mal-progress-text.pop {
+    transform: scale(1.2);
+    color: var(--mal-color-1);
 }
 
 .mal-mini-btn {
-    border: none; color: white; width: 28px; height: 24px;
-    border-radius: 3px; cursor: pointer; font-weight: bold;
+    border: none; color: white; width: 28px; height: 26px;
+    border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;
     display: flex; align-items: center; justify-content: center;
+    transition: transform 0.1s, filter 0.2s, opacity 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-.mal-mini-btn:hover { filter: brightness(1.2); }
-.mal-mini-btn:disabled { background: #555 !important; cursor: wait; }
+
+.mal-mini-btn.dec { background: var(--mal-color-4); }
+.mal-mini-btn.inc { background: var(--mal-color-1); }
+
+.mal-mini-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.mal-mini-btn:active { transform: translateY(1px); }
+.mal-mini-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .mal-update-btn {
-    width: 100%; background: #2e51a2; color: white; border: none; padding: 8px;
-    border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 5px;
+    width: 100%; background: var(--mal-color-2); color: white; border: none; padding: 10px;
+    border-radius: 6px; cursor: pointer; font-weight: 700; margin-top: 5px;
+    transition: background 0.2s, transform 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
+.mal-update-btn:hover { background: #223f82; transform: translateY(-1px); }
+.mal-update-btn:active { transform: translateY(1px); }
