@@ -166,39 +166,38 @@ export class UIManager {
             const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
             statusSelect.value = statusMap[data.status] || 'plan_to_watch';
 
-            if (data.progress !== undefined) {
-                const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
-                const field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
+            // Garante que o progresso é inicializado a 0 se estiver omisso, forçando a exibição da UI
+            if (data.progress === undefined) data.progress = 0;
+            
+            const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
+            const field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
+            
+            progressText.innerText = `${prefix}: ${data.progress}`;
+            progressWrap.style.display = 'flex';
+            
+            const updateProgress = (newVal) => {
+                if (newVal < 0) return;
+                quickAddBtn.disabled = true;
+                quickDecBtn.disabled = true;
                 
-                progressText.innerText = `${prefix}: ${data.progress}`;
-                progressWrap.style.display = 'flex';
-                
-                const updateProgress = (newVal) => {
-                    if (newVal < 0) return;
-                    quickAddBtn.disabled = true;
-                    quickDecBtn.disabled = true;
-                    
-                    chrome.runtime.sendMessage({
-                        action: "UPDATE_PROGRESS",
-                        id: data.id,
-                        mediaType: mediaType,
-                        data: { [field]: newVal }
-                    }, (response) => {
-                        if (response && response.success) {
-                            data.progress = newVal;
-                            progressText.innerText = `${prefix}: ${newVal}`;
-                            DataManager.invalidateCache();
-                        }
-                        quickAddBtn.disabled = false;
-                        quickDecBtn.disabled = false;
-                    });
-                };
+                chrome.runtime.sendMessage({
+                    action: "UPDATE_PROGRESS",
+                    id: data.id,
+                    mediaType: mediaType,
+                    data: { [field]: newVal }
+                }, (response) => {
+                    if (response && response.success) {
+                        data.progress = newVal;
+                        progressText.innerText = `${prefix}: ${newVal}`;
+                        DataManager.invalidateCache();
+                    }
+                    quickAddBtn.disabled = false;
+                    quickDecBtn.disabled = false;
+                });
+            };
 
-                quickAddBtn.onclick = () => updateProgress(data.progress + 1);
-                quickDecBtn.onclick = () => updateProgress(data.progress - 1);
-            } else {
-                progressWrap.style.display = 'none';
-            }
+            quickAddBtn.onclick = () => updateProgress(data.progress + 1);
+            quickDecBtn.onclick = () => updateProgress(data.progress - 1);
         } else {
             progressWrap.style.display = 'none';
         }

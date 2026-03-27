@@ -7,6 +7,13 @@
   "host_permissions": [
     "<all_urls>"
   ],
+  "oauth2": {
+    "client_id": "512993974211-0u810mv1rq6jf9dob0sk6p65rqnsv63v.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": "icon.png"

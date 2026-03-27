@@ -43,6 +43,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
 
+    // Cloud Sync Elements
+    const syncStatusText = document.getElementById('syncStatusText');
+    const syncActionBtn = document.getElementById('syncActionBtn');
+    const syncWarningBox = document.getElementById('syncWarningBox');
+
     const colorPickers = {
         1: document.getElementById('color1'), 2: document.getElementById('color2'),
         3: document.getElementById('color3'), 4: document.getElementById('color4'),
@@ -114,6 +119,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     PopupUI.initTabs(tabs, panes, loadCoreData, loadCoreData);
+    PopupUI.initSettingsAccordions(); 
+
+    // --- CLOUD SYNC LOGIC ---
+    const updateSyncUI = (isLoggedIn, email) => {
+        if (isLoggedIn) {
+            syncStatusText.innerText = email || I18nService.get('syncLoggedIn', currentLang);
+            syncStatusText.style.color = '#2db039'; // Green status
+            syncActionBtn.innerText = I18nService.get('btnLogout', currentLang);
+            syncActionBtn.className = "action-btn btn-danger";
+            syncWarningBox.style.display = 'none'; // Esconde aviso se já fez login
+        } else {
+            syncStatusText.innerText = I18nService.get('syncNotLoggedIn', currentLang);
+            syncStatusText.style.color = 'var(--text-muted)';
+            syncActionBtn.innerText = I18nService.get('btnLogin', currentLang);
+            syncActionBtn.className = "action-btn";
+            syncWarningBox.style.display = 'block'; // Mostra aviso
+        }
+    };
+
+    chrome.runtime.sendMessage({ action: "GET_SYNC_STATUS" }, (res) => {
+        if (res && res.loggedIn) updateSyncUI(true, res.email);
+        else updateSyncUI(false);
+    });
+
+    syncActionBtn.addEventListener('click', () => {
+        if (syncActionBtn.innerText === I18nService.get('btnLogout', currentLang)) {
+            syncActionBtn.innerText = "...";
+            chrome.runtime.sendMessage({ action: "SYNC_LOGOUT" }, (res) => {
+                updateSyncUI(false);
+            });
+        } else {
+            syncActionBtn.innerText = "...";
+            chrome.runtime.sendMessage({ action: "SYNC_LOGIN" }, (res) => {
+                if (res && res.success) {
+                    updateSyncUI(true, res.email);
+                } else {
+                    updateSyncUI(false);
+                }
+            });
+        }
+    });
 
     chrome.storage.local.get([
         'malUsername', 'malAvatar', 'extensionLang', 

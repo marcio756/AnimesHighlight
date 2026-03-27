@@ -2,6 +2,7 @@
 
 import { MalService } from './api.js';
 import { ReleaseMonitorService, MONITOR_CONFIG } from './monitor.js';
+import { SyncService } from './sync.js'; 
 
 /**
  * Escutador de Rotas de Mensagens
@@ -45,6 +46,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
     }
+
+    // --- Rotas de Cloud Sync para a Interface do Utilizador ---
+    if (request.action === "GET_SYNC_STATUS") {
+        SyncService.authenticate(false)
+            .then(user => sendResponse({ loggedIn: true, email: user.email }))
+            .catch(() => sendResponse({ loggedIn: false }));
+        return true;
+    }
+
+    if (request.action === "SYNC_LOGIN") {
+        SyncService.authenticate(true)
+            .then(user => { 
+                SyncService.pullFromCloud(); 
+                sendResponse({ success: true, email: user.email }); 
+            })
+            .catch(err => sendResponse({ success: false, error: err.message }));
+        return true;
+    }
+
+    if (request.action === "SYNC_LOGOUT") {
+        SyncService.logout().then(() => sendResponse({ success: true }));
+        return true;
+    }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -82,12 +106,17 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
     });
 });
 
-chrome.runtime.onStartup.addListener(() => ReleaseMonitorService.setupAlarm());
+chrome.runtime.onStartup.addListener(() => {
+    ReleaseMonitorService.setupAlarm();
+    SyncService.pullFromCloud(); 
+});
 
 chrome.runtime.onInstalled.addListener((details) => {
     chrome.storage.local.remove('seenEpisodes'); 
     
-    // Migração da estrutura v1.7 legacy (Single-site) para v2.0 (Multi-site Array)
+    SyncService.initListeners();
+    SyncService.pullFromCloud();
+    
     chrome.storage.local.get(['monitorUrl', 'monitorEnabled', 'monitoredSites'], (res) => {
         if (res.monitorUrl && !res.monitoredSites) {
             try {
@@ -99,7 +128,7 @@ chrome.runtime.onInstalled.addListener((details) => {
                     enabled: res.monitorEnabled !== false
                 };
                 chrome.storage.local.set({ monitoredSites: [defaultSite] }, () => {
-                    chrome.storage.local.remove(['monitorUrl', 'monitorEnabled']); // Cleanup
+                    chrome.storage.local.remove(['monitorUrl', 'monitorEnabled']); 
                     ReleaseMonitorService.setupAlarm();
                 });
             } catch(e) { ReleaseMonitorService.setupAlarm(); }

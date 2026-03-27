@@ -25,6 +25,22 @@ export class PopupUI {
         });
     }
 
+    /**
+     * Initializes the accordion logic for settings cards.
+     * @description Binds click events to settings headers to toggle the 'collapsed' class.
+     */
+    static initSettingsAccordions() {
+        const headers = document.querySelectorAll('.settings-header');
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                const card = header.closest('.settings-card');
+                if (card) {
+                    card.classList.toggle('collapsed');
+                }
+            });
+        });
+    }
+
     static renderAlarmFeedback(elementId, currentLang) {
         const el = document.getElementById(elementId);
         if (!el) return;
@@ -177,7 +193,6 @@ export class PopupUI {
             listEl.appendChild(li);
         });
 
-        // Apenas o botão de Apagar (Cruz/X) invoca o handleRemove agora.
         const handleRemove = (e) => {
             const idx = parseInt(e.target.getAttribute('data-index'));
             logs.splice(idx, 1);
@@ -185,6 +200,5 @@ export class PopupUI {
         };
 
         listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
-        // O botão 'Abrir' funciona apenas como um link href normal (sem apagar o log).
     }
 }

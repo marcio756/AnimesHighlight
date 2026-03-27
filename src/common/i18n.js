@@ -29,6 +29,13 @@ const DICTIONARY = {
         langEn: "English",
         langPt: "Português",
         
+        lblCloudSync: "Cloud Sync & Backup",
+        syncWarning: "You can use the extension normally without logging in, but if you uninstall or change devices, your data and site settings will be lost.",
+        syncLoggedIn: "Logged in",
+        syncNotLoggedIn: "Not logged in (Local only)",
+        btnLogin: "Login",
+        btnLogout: "Logout",
+
         lblEnablePanel: "Show Floating Panel",
         lblEnableTransparency: "Transparent Panel (Hover to view)",
         lblSavePanelPos: "Save Panel Drag Position",
@@ -101,6 +108,13 @@ const DICTIONARY = {
         lblLanguage: "Idioma da Extensão:",
         langEn: "English",
         langPt: "Português",
+
+        lblCloudSync: "Sincronização Cloud",
+        syncWarning: "Podes usar a extensão normalmente sem fazer login, mas se a desinstalares ou mudares de dispositivo, vais perder as tuas definições e histórico.",
+        syncLoggedIn: "Sessão iniciada",
+        syncNotLoggedIn: "Sem sessão iniciada (Apenas local)",
+        btnLogin: "Login",
+        btnLogout: "Sair",
         
         lblEnablePanel: "Ativar Painel Flutuante",
         lblEnableTransparency: "Ativar Transparência no Painel",
