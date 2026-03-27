@@ -165,3 +165,149 @@
 
 .mal-update-btn:hover { background: #223f82; transform: translateY(-1px); }
 .mal-update-btn:active { transform: translateY(1px); }
+
+.mal-status-dropdown {
+    background-color: var(--mal-input-bg); 
+    border: 1px solid var(--mal-panel-border); 
+    color: var(--mal-panel-text);
+    border-radius: 6px; 
+    padding: 8px 32px 8px 10px; 
+    font-size: 13px; 
+    font-weight: 600;
+    width: 100%; 
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    
+    /* Remoção do aspeto nativo e injeção do SVG Premium Chevron */
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+}
+
+[data-theme="dark"] .mal-status-dropdown {
+    /* Chevron mais claro no Dark Mode */
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0aec0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+}
+
+.mal-status-dropdown:focus {
+    border-color: var(--mal-color-2);
+    box-shadow: 0 0 0 3px rgba(46, 81, 162, 0.2);
+}
+
+/* ==========================================
+ * PARTE 3: PREMIUM CUSTOM DROPDOWN
+ * ==========================================
+ */
+.mal-custom-select {
+    position: relative;
+    width: 100%;
+    user-select: none;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.mal-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--mal-input-bg);
+    border: 1px solid var(--mal-panel-border);
+    color: var(--mal-panel-text);
+    border-radius: 6px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.mal-select-trigger:hover {
+    border-color: var(--mal-color-2);
+}
+
+.mal-custom-select.open .mal-select-trigger {
+    border-color: var(--mal-color-2);
+    box-shadow: 0 0 0 3px rgba(46, 81, 162, 0.15);
+}
+
+.mal-select-trigger .chevron {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.3s var(--mal-transition);
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+[data-theme="dark"] .mal-select-trigger .chevron {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0aec0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+}
+
+.mal-custom-select.open .mal-select-trigger .chevron {
+    transform: rotate(180deg);
+}
+
+/* A Lista Expandida Bonita */
+.mal-options-container {
+    position: absolute;
+    bottom: 100%; /* Inverte a âncora: cresce de baixo para cima */
+    left: 0;
+    right: 0;
+    margin-bottom: 6px; /* Espaço entre o menu e o botão */
+    background: var(--mal-input-bg);
+    border: 1px solid var(--mal-panel-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.25s var(--mal-transition);
+    overflow: hidden;
+    backdrop-filter: var(--mal-panel-blur);
+    -webkit-backdrop-filter: var(--mal-panel-blur);
+}
+
+[data-theme="dark"] .mal-options-container {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.mal-custom-select.open .mal-options-container {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.mal-option {
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, padding-left 0.2s;
+    color: var(--mal-panel-text);
+    border-bottom: 1px solid rgba(113, 128, 150, 0.1);
+}
+
+.mal-option:last-child {
+    border-bottom: none;
+}
+
+.mal-option:hover:not(.disabled) {
+    background: var(--mal-color-2);
+    color: white;
+    padding-left: 18px; /* Micro-interação premium */
+}
+
+.mal-option.selected {
+    font-weight: 800;
+    color: var(--mal-color-2);
+    background: rgba(46, 81, 162, 0.05);
+}
+
+.mal-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: transparent;
+    font-style: italic;
+}

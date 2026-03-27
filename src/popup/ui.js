@@ -4,9 +4,6 @@
  */
 import { I18nService } from '../common/i18n.js';
 
-/**
- * ProgressService ensures visual feedback during latent network operations (Progress Illusion).
- */
 export class ProgressService {
     static start() {
         const bar = document.getElementById('globalProgress');
@@ -22,9 +19,6 @@ export class ProgressService {
 export class PopupUI {
     static clockInterval = null;
 
-    /**
-     * Initializes Tab Navigation with Context Transition support via CSS classes.
-     */
     static initTabs(tabs, panes, onHistoryLoad, onMonitorLoad) {
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
@@ -33,7 +27,6 @@ export class PopupUI {
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
 
-                // Trigger Context Transition via active class assignment
                 panes.forEach(pane => {
                     pane.classList.toggle('active', pane.id === target);
                 });
@@ -44,9 +37,6 @@ export class PopupUI {
         });
     }
 
-    /**
-     * Initializes accordion logic (Continuity Illusion without leaving the context).
-     */
     static initSettingsAccordions() {
         const headers = document.querySelectorAll('.settings-header');
         headers.forEach(header => {
@@ -106,9 +96,6 @@ export class PopupUI {
         container.style.display = 'flex';
     }
 
-    /**
-     * Renders site list utilizing Optimistic UI principles.
-     */
     static renderSitesList(sites, listEl, emptyEl, callbacks) {
         listEl.innerHTML = "";
         
@@ -118,6 +105,8 @@ export class PopupUI {
         }
 
         emptyEl.style.display = 'none';
+
+        const trashIconSVG = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
 
         sites.forEach((site) => {
             if (site.isSkeleton) {
@@ -141,17 +130,15 @@ export class PopupUI {
                         <input type="checkbox" class="toggle-site" data-id="${site.id}" ${site.enabled ? 'checked' : ''}>
                         <span class="slider round"></span>
                     </label>
-                    <button class="btn-icon delete-site" data-id="${site.id}" title="Remove Site" style="border:none; background:transparent; cursor:pointer; font-size:16px;">🗑️</button>
+                    <button class="btn-icon delete-site" data-id="${site.id}" title="Remove Site" style="border:none; background:transparent; cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">${trashIconSVG}</button>
                 </div>
             `;
             listEl.appendChild(li);
         });
 
-        // Optimistic UI bindings
         listEl.querySelectorAll('.toggle-site').forEach(btn => {
             btn.addEventListener('change', (e) => {
                 const li = e.target.closest('.site-card');
-                // Optimistically update view
                 li.classList.toggle('disabled', !e.target.checked);
                 callbacks.onToggle(e.target.dataset.id, e.target.checked);
             });
@@ -160,29 +147,38 @@ export class PopupUI {
         listEl.querySelectorAll('.delete-site').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const li = e.target.closest('.site-card');
-                li.style.opacity = '0.3'; // Optimistic delete feedback
-                setTimeout(() => callbacks.onDelete(e.target.dataset.id), 150);
+                li.style.opacity = '0.3'; 
+                setTimeout(() => callbacks.onDelete(e.currentTarget.dataset.id), 150);
             });
         });
     }
 
-    static updateSiteFilterDropdown(sites, selectEl, currentLang) {
-        if (!selectEl) return;
-        const currentVal = selectEl.value;
-        selectEl.innerHTML = `<option value="all">${I18nService.get('filterAllSites', currentLang)}</option>`;
+    static updateSiteFilterDropdown(sites, optionsContainerEl, labelEl, currentLang, currentValue, onChangeCallback) {
+        if (!optionsContainerEl || !labelEl) return;
         
+        const allSitesText = I18nService.get('filterAllSites', currentLang);
+        let html = `<div class="mal-option ${currentValue === 'all' ? 'selected' : ''}" data-value="all">${allSitesText}</div>`;
+        
+        let currentLabel = allSitesText;
+
         if (sites) {
             sites.forEach(site => {
-                const opt = document.createElement('option');
-                opt.value = site.name;
-                opt.innerText = site.name;
-                selectEl.appendChild(opt);
+                const isSelected = currentValue === site.name;
+                if (isSelected) currentLabel = site.name;
+                html += `<div class="mal-option ${isSelected ? 'selected' : ''}" data-value="${site.name}">${site.name}</div>`;
             });
         }
         
-        if (Array.from(selectEl.options).some(o => o.value === currentVal)) {
-            selectEl.value = currentVal;
-        }
+        optionsContainerEl.innerHTML = html;
+        labelEl.innerText = currentLabel;
+
+        optionsContainerEl.querySelectorAll('.mal-option').forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                const val = e.target.getAttribute('data-value');
+                labelEl.innerText = e.target.innerText;
+                onChangeCallback(val);
+            });
+        });
     }
 
     static renderNotifications(logs, listEl, emptyEl, clearBtn, filterValue, onUpdateLogs) {
@@ -200,6 +196,8 @@ export class PopupUI {
         emptyEl.style.display = 'none';
         clearBtn.style.display = 'block';
 
+        const closeIconSVG = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+
         filteredLogs.forEach((log) => {
             const originalIndex = logs.indexOf(log); 
             const li = document.createElement('li');
@@ -209,7 +207,7 @@ export class PopupUI {
             
             li.innerHTML = `
                 <div class="notif-item" style="position: relative; padding-right: 25px;">
-                    <button class="delete-notif-btn" data-index="${originalIndex}" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #e53e3e; font-size: 18px; cursor: pointer; line-height: 1; padding: 0; transition: transform 0.2s;" title="Remover">&times;</button>
+                    <button class="delete-notif-btn" data-index="${originalIndex}" style="position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;" title="Remover">${closeIconSVG}</button>
                     
                     <div style="display: flex; flex-direction: column; gap: 8px; width:100%;">
                         <span class="notif-text" style="font-size: 13px; font-weight: 700; color: var(--text-main); padding-right: 15px;">${log.text}</span>
@@ -228,15 +226,16 @@ export class PopupUI {
         });
 
         const handleRemove = (e) => {
-            const idx = parseInt(e.target.getAttribute('data-index'));
-            const li = e.target.closest('.notif-item');
+            const btn = e.currentTarget;
+            const idx = parseInt(btn.getAttribute('data-index'));
+            const li = btn.closest('.notif-item');
             li.style.opacity = '0';
             li.style.transform = 'translateX(20px)';
             
             setTimeout(() => {
                 logs.splice(idx, 1);
                 if (onUpdateLogs) onUpdateLogs(logs);
-            }, 250); // Optimistic UI removal timing
+            }, 250); 
         };
 
         listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));

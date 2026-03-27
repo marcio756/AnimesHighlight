@@ -33,7 +33,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const notifListEl = document.getElementById('notificationList');
     const emptyStateEl = document.getElementById('emptyState');
     const clearNotifsBtn = document.getElementById('clearNotifsBtn');
-    const historySiteFilter = document.getElementById('historySiteFilter');
+
+    // =======================================================
+    // ELEMENTOS DO CUSTOM DROPDOWN (HISTÓRICO)
+    // =======================================================
+    const historyFilterWrapper = document.getElementById('historyFilterWrapper');
+    const historyFilterTrigger = document.getElementById('historyFilterTrigger');
+    const historyFilterLabel = document.getElementById('historyFilterLabel');
+    const historyFilterOptions = document.getElementById('historyFilterOptions');
+    let currentFilterValue = 'all'; // Guarda o estado do filtro atual
 
     const langSelect = document.getElementById('langSelect');
     const checkPanelEnabled = document.getElementById('panelEnabled');
@@ -44,7 +52,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
 
-    // Cloud Sync Elements
     const syncStatusText = document.getElementById('syncStatusText');
     const syncActionBtn = document.getElementById('syncActionBtn');
     const syncWarningBox = document.getElementById('syncWarningBox');
@@ -58,9 +65,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     let globalSites = [];
     let globalLogs = [];
 
+    // Ícones Premium em SVG
+    const iconSun = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
+    const iconMoon = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
+
     const updateThemeIcon = () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        themeToggleBtn.innerText = isDark ? '☀️' : '🌙';
+        themeToggleBtn.innerHTML = isDark ? iconSun : iconMoon;
     };
     updateThemeIcon();
 
@@ -71,6 +82,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateThemeIcon();
         chrome.storage.local.set({ theme: newTheme });
     });
+
+    // =======================================================
+    // LÓGICA DO CUSTOM DROPDOWN (HISTÓRICO)
+    // =======================================================
+    historyFilterTrigger.addEventListener('click', () => {
+        historyFilterWrapper.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (historyFilterWrapper && !historyFilterWrapper.contains(e.target)) {
+            historyFilterWrapper.classList.remove('open');
+        }
+    });
+
+    const updateFilter = () => {
+        PopupUI.updateSiteFilterDropdown(globalSites, historyFilterOptions, historyFilterLabel, currentLang, currentFilterValue, (newVal) => {
+            currentFilterValue = newVal;
+            historyFilterWrapper.classList.remove('open');
+            renderLogs();
+            updateFilter(); // Re-renderiza para atualizar a classe "selected"
+        });
+    };
+    // =======================================================
 
     const syncColorVisibility = () => {
         hlStatusCheckboxes.forEach(cb => {
@@ -84,7 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveSitesState = (triggerAlarmRefresh = true) => {
         chrome.storage.local.set({ monitoredSites: globalSites }, () => {
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang);
+            updateFilter(); // Substitui a chamada antiga
             if (triggerAlarmRefresh) chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
         });
     };
@@ -100,8 +134,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    // Atualizado para usar currentFilterValue
     const renderLogs = () => {
-        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, historySiteFilter.value, (updatedLogs) => {
+        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, currentFilterValue, (updatedLogs) => {
             globalLogs = updatedLogs;
             chrome.storage.local.set({ notificationLog: globalLogs }, () => renderLogs());
         });
@@ -113,7 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             globalLogs = result.notificationLog || [];
             
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang);
+            updateFilter(); // Substitui a chamada antiga
             renderLogs();
             PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
         });
@@ -122,7 +157,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     PopupUI.initTabs(tabs, panes, loadCoreData, loadCoreData);
     PopupUI.initSettingsAccordions(); 
 
-    // --- CLOUD SYNC LOGIC & OPTIMISTIC UI ---
     const updateSyncUI = (isLoggedIn, email) => {
         if (isLoggedIn) {
             syncStatusText.innerText = email || I18nService.get('syncLoggedIn', currentLang);
@@ -206,7 +240,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // Skeleton Screen Logic for adding site
             globalSites.push({ id: 'temp', isSkeleton: true });
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
             inputNewSiteUrl.value = "";
@@ -228,9 +261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     inputNewSiteUrl.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn.click(); });
-    historySiteFilter.addEventListener('change', () => renderLogs());
 
-    // Optimistic Save
     saveSettingsBtn.addEventListener('click', () => {
         const selectedLang = langSelect.value;
         const pEnabled = checkPanelEnabled.checked;
@@ -244,7 +275,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             3: colorPickers[3].value, 4: colorPickers[4].value, 6: colorPickers[6].value
         };
 
-        // Optimistic UI change
         saveSettingsBtn.innerText = "...";
         saveSettingsBtn.disabled = true;
 
@@ -254,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, () => {
             currentLang = selectedLang;
             I18nService.translateDOM(currentLang); 
-            PopupUI.updateSiteFilterDropdown(globalSites, historySiteFilter, currentLang); 
+            updateFilter(); // Atualiza a label do filtro de histórico caso o idioma mude
             PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
             
             saveSettingsBtn.innerText = I18nService.get('btnSaveSettings', currentLang);
@@ -277,7 +307,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         saveProfileBtn.disabled = true;
         profileArea.style.display = 'none';
         
-        // Ativar Skeleton & Progress Illusion
         profileSkeleton.style.display = 'flex';
         ProgressService.start();
 

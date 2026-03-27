@@ -1,7 +1,7 @@
 /**
  * UI Presentation Layer
  * @description Manages all DOM manipulations, CSS injections, and floating panel generation.
- * Features Optimistic UI updates and Premium Glassmorphism design.
+ * Features Optimistic UI updates, Premium Glassmorphism, and Custom Dropdown Components.
  */
 import { I18nService } from '../common/i18n.js';
 import { STATUS_MAP, ContextAnalyzer } from './utils.js';
@@ -21,7 +21,6 @@ export class UIManager {
         const res = await chrome.storage.local.get(['customColors']);
         if (res.customColors) {
             const root = document.documentElement;
-            // Mapeia para as novas variáveis do design premium
             if (res.customColors[1]) root.style.setProperty('--mal-color-1', res.customColors[1]);
             if (res.customColors[2]) root.style.setProperty('--mal-color-2', res.customColors[2]);
             if (res.customColors[3]) root.style.setProperty('--mal-color-3', res.customColors[3]);
@@ -93,12 +92,19 @@ export class UIManager {
             }
         });
 
+        // HTML substituído com o Custom Dropdown em vez do <select> nativo
         panel.innerHTML = `
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <select id="malStatusSelect" class="mal-status-dropdown"></select>
+                
+                <div class="mal-custom-select" id="malStatusSelectWrapper">
+                    <div class="mal-select-trigger" id="malStatusTrigger">
+                        <span id="malStatusLabel">Loading...</span>
+                        <span class="chevron"></span>
+                    </div>
+                    <div class="mal-options-container" id="malStatusOptions"></div>
                 </div>
+
                 <div id="malProgressWrap" class="mal-progress-container" style="display: none;">
                     <span id="malProgressText" class="mal-progress-text"></span>
                     <div style="display: flex; gap: 6px;">
@@ -113,20 +119,37 @@ export class UIManager {
         
         const header = document.getElementById('malPanelTitle');
         DraggableService.init(panel, header, this.savePanelPosition);
+
+        // Lógica Global para fechar o Dropdown Premium ao clicar fora
+        document.addEventListener('click', (e) => {
+            const wrapper = document.getElementById('malStatusSelectWrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                wrapper.classList.remove('open');
+            }
+        });
     }
 
     static async showNotFoundPanel(itemName) {
         await this.createPanel();
         const panel = document.getElementById('malControlPanel');
         const titleEl = document.getElementById('malPanelTitle');
-        const statusSelect = document.getElementById('malStatusSelect');
+        
+        const statusWrapper = document.getElementById('malStatusSelectWrapper');
+        const statusLabel = document.getElementById('malStatusLabel');
+        const statusOptions = document.getElementById('malStatusOptions');
+        
         const btn = document.getElementById('malOpenBtn');
         const progressWrap = document.getElementById('malProgressWrap');
         
         titleEl.innerText = itemName;
         
-        statusSelect.innerHTML = `<option value="" disabled selected>${I18nService.get('statusNotFoundMal', this.currentLanguage)}</option>`;
-        statusSelect.disabled = true;
+        // Desativa o Custom Dropdown
+        statusWrapper.classList.remove('open');
+        statusLabel.innerText = I18nService.get('statusNotFoundMal', this.currentLanguage);
+        statusOptions.innerHTML = '';
+        statusWrapper.style.opacity = '0.5';
+        statusWrapper.style.pointerEvents = 'none';
+        
         progressWrap.style.display = 'none';
         
         btn.innerText = I18nService.get('btnSearchMal', this.currentLanguage);
@@ -142,7 +165,12 @@ export class UIManager {
         await this.createPanel();
         const panel = document.getElementById('malControlPanel');
         const titleEl = document.getElementById('malPanelTitle');
-        const statusSelect = document.getElementById('malStatusSelect');
+        
+        const statusWrapper = document.getElementById('malStatusSelectWrapper');
+        const statusTrigger = document.getElementById('malStatusTrigger');
+        const statusLabel = document.getElementById('malStatusLabel');
+        const statusOptions = document.getElementById('malStatusOptions');
+        
         const btn = document.getElementById('malOpenBtn');
         const progressWrap = document.getElementById('malProgressWrap');
         const progressText = document.getElementById('malProgressText');
@@ -154,20 +182,69 @@ export class UIManager {
         const mediaType = data?.type || ContextAnalyzer.guessContentType();
         const watchingLabel = mediaType === 'manga' ? 'statusReading' : 'statusWatching';
 
-        statusSelect.innerHTML = `
-            ${!data?.status ? `<option value="" disabled selected>${I18nService.get('statusAddToList', this.currentLanguage)}</option>` : ''}
-            <option value="watching">${I18nService.get(watchingLabel, this.currentLanguage)}</option>
-            <option value="completed">${I18nService.get('statusCompleted', this.currentLanguage)}</option>
-            <option value="on_hold">${I18nService.get('statusOnHold', this.currentLanguage)}</option>
-            <option value="dropped">${I18nService.get('statusDropped', this.currentLanguage)}</option>
-            <option value="plan_to_watch">${I18nService.get('statusPlanned', this.currentLanguage)}</option>
+        // Reativa o Custom Dropdown
+        statusWrapper.style.opacity = '1';
+        statusWrapper.style.pointerEvents = 'auto';
+
+        const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
+        const currentStatusStr = data?.status ? statusMap[data.status] : null;
+
+        // Popula as opções do Custom Dropdown
+        statusOptions.innerHTML = `
+            ${!data?.status ? `<div class="mal-option disabled">${I18nService.get('statusAddToList', this.currentLanguage)}</div>` : ''}
+            <div class="mal-option ${currentStatusStr === 'watching' ? 'selected' : ''}" data-value="watching">${I18nService.get(watchingLabel, this.currentLanguage)}</div>
+            <div class="mal-option ${currentStatusStr === 'completed' ? 'selected' : ''}" data-value="completed">${I18nService.get('statusCompleted', this.currentLanguage)}</div>
+            <div class="mal-option ${currentStatusStr === 'on_hold' ? 'selected' : ''}" data-value="on_hold">${I18nService.get('statusOnHold', this.currentLanguage)}</div>
+            <div class="mal-option ${currentStatusStr === 'dropped' ? 'selected' : ''}" data-value="dropped">${I18nService.get('statusDropped', this.currentLanguage)}</div>
+            <div class="mal-option ${currentStatusStr === 'plan_to_watch' ? 'selected' : ''}" data-value="plan_to_watch">${I18nService.get('statusPlanned', this.currentLanguage)}</div>
         `;
-        statusSelect.disabled = false;
 
+        // Define a etiqueta inicial (se já estiver na lista, mostra o estado, se não, mostra "Adicionar à Lista")
+        if (currentStatusStr) {
+            const activeOption = statusOptions.querySelector(`.mal-option[data-value="${currentStatusStr}"]`);
+            statusLabel.innerText = activeOption ? activeOption.innerText : I18nService.get('statusPlanned', this.currentLanguage);
+        } else {
+            statusLabel.innerText = I18nService.get('statusAddToList', this.currentLanguage);
+        }
+
+        // Lógica de Abrir/Fechar
+        statusTrigger.onclick = () => {
+            statusWrapper.classList.toggle('open');
+        };
+
+        // Lógica ao Clicar numa Opção (Optimistic UI)
+        statusOptions.querySelectorAll('.mal-option:not(.disabled)').forEach(opt => {
+            opt.onclick = (e) => {
+                const newStatus = e.target.getAttribute('data-value');
+                statusLabel.innerText = e.target.innerText;
+                statusWrapper.classList.remove('open');
+                
+                // Feedback visual de carregamento no trigger
+                statusWrapper.style.opacity = '0.7';
+                statusWrapper.style.pointerEvents = 'none';
+
+                chrome.runtime.sendMessage({
+                    action: "UPDATE_PROGRESS",
+                    id: data.id,
+                    mediaType: mediaType,
+                    data: { status: newStatus }
+                }, (response) => {
+                    if (response && response.success) {
+                        DataManager.invalidateCache();
+                        // Reinicia a UI para o estado correto
+                        const statusId = Object.keys(statusMap).find(key => statusMap[key] === newStatus);
+                        this.showPanel(itemName, { ...data, status: parseInt(statusId) });
+                    } else {
+                        // Rollback em caso de erro
+                        statusWrapper.style.opacity = '1';
+                        statusWrapper.style.pointerEvents = 'auto';
+                    }
+                });
+            };
+        });
+
+        // Lógica de Progresso (+ / -)
         if (data && data.status) {
-            const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
-            statusSelect.value = statusMap[data.status] || 'plan_to_watch';
-
             if (data.progress === undefined) data.progress = 0;
             
             const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
@@ -176,22 +253,15 @@ export class UIManager {
             progressText.innerText = `${prefix}: ${data.progress}`;
             progressWrap.style.display = 'flex';
             
-            /**
-             * Aplicação de Optimistic UI
-             * O UI atualiza instantaneamente para dar sensação de zero latência.
-             */
             const updateProgressOptimistic = (newVal) => {
                 if (newVal < 0) return;
                 
                 const oldVal = data.progress;
-                
-                // 1. Atualização Otimista Imediata
                 data.progress = newVal;
                 progressText.innerText = `${prefix}: ${newVal}`;
                 
-                // Animação de Feedback "Pop"
                 progressText.classList.remove('pop');
-                void progressText.offsetWidth; // Reflow
+                void progressText.offsetWidth; 
                 progressText.classList.add('pop');
                 progressWrap.classList.add('optimistic-success');
                 
@@ -200,11 +270,9 @@ export class UIManager {
                     progressWrap.classList.remove('optimistic-success');
                 }, 300);
 
-                // Prevenir spam de cliques rápidos que possam engasgar a API
                 quickAddBtn.disabled = true;
                 quickDecBtn.disabled = true;
                 
-                // 2. Chamada de Rede em Background
                 chrome.runtime.sendMessage({
                     action: "UPDATE_PROGRESS",
                     id: data.id,
@@ -217,10 +285,8 @@ export class UIManager {
                     if (response && response.success) {
                         DataManager.invalidateCache();
                     } else {
-                        // 3. Rollback silencioso em caso de erro da API
                         data.progress = oldVal;
                         progressText.innerText = `${prefix}: ${oldVal}`;
-                        console.warn("[MAL Highlighter] Optimistic Update failed. Reverted progress.");
                     }
                 });
             };
@@ -230,30 +296,6 @@ export class UIManager {
         } else {
             progressWrap.style.display = 'none';
         }
-
-        // Dropdown status change using standard loading (not optimistic as it implies major state change)
-        statusSelect.onchange = (e) => {
-            const newStatus = e.target.value;
-            if (!newStatus) return;
-
-            statusSelect.disabled = true;
-            chrome.runtime.sendMessage({
-                action: "UPDATE_PROGRESS",
-                id: data.id,
-                mediaType: mediaType,
-                data: { status: newStatus }
-            }, (response) => {
-                statusSelect.disabled = false;
-                if (response && response.success) {
-                    DataManager.invalidateCache();
-                    // Reinicia a janela para refletir novos botões de progresso caso aplicável
-                    const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
-                    const statusId = Object.keys(statusMap).find(key => statusMap[key] === newStatus);
-                    
-                    this.showPanel(itemName, { ...data, status: parseInt(statusId) });
-                }
-            });
-        };
         
         btn.innerText = I18nService.get('panelOpenBtn', this.currentLanguage);
         btn.onclick = () => {

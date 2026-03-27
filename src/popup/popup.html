@@ -61,10 +61,16 @@
         </div>
 
         <div id="tab-notifications" class="tab-pane">
-            <div class="filter-row" style="margin-bottom: 12px;">
-                <select id="historySiteFilter" class="modern-select">
-                    <option value="all" data-i18n="filterAllSites">All Sites</option>
-                </select>
+            <div class="filter-row" style="margin-bottom: 12px; position: relative; z-index: 50;">
+                
+                <div class="mal-custom-select" id="historyFilterWrapper">
+                    <div class="mal-select-trigger" id="historyFilterTrigger">
+                        <span id="historyFilterLabel" data-i18n="filterAllSites">All Sites</span>
+                        <span class="chevron"></span>
+                    </div>
+                    <div class="mal-options-container" id="historyFilterOptions"></div>
+                </div>
+
             </div>
 
             <div id="notifContainer">
