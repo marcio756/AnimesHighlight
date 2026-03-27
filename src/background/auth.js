@@ -1,6 +1,6 @@
 /**
  * Authentication Service
- * @description Handles OAuth2 PKCE flow for MyAnimeList API, token storage, and refreshing.
+ * @description Handles OAuth2 PKCE flow for MyAnimeList API, token storage, and automatic token refreshing.
  */
 export class AuthService {
     static CLIENT_ID = 'ea88ed2de2dce587ff8e3e5849c3cf9f';
@@ -23,16 +23,77 @@ export class AuthService {
     }
 
     /**
-     * Initiates the OAuth2 flow to get an access token
+     * Refreshes the existing access token using the stored refresh token.
+     * @param {string} refreshToken - The token used to request a new access session.
+     * @returns {Promise<string>} The newly generated access token.
+     */
+    static async refreshAccessToken(refreshToken) {
+        try {
+            const tokenPayload = {
+                client_id: this.CLIENT_ID,
+                client_secret: this.CLIENT_SECRET,
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken
+            };
+
+            const response = await fetch('https://myanimelist.net/v1/oauth2/token', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded' 
+                },
+                body: new URLSearchParams(tokenPayload)
+            });
+
+            if (!response.ok) {
+                throw new Error('Refresh token expired or invalid. Re-authentication required.');
+            }
+
+            const tokenData = await response.json();
+            
+            // Calculate exact expiration timestamp (subtracting 5 minutes for safety buffer)
+            const expiresInMs = (tokenData.expires_in - 300) * 1000;
+            const expiresAt = Date.now() + expiresInMs;
+
+            await chrome.storage.local.set({ 
+                mal_access_token: tokenData.access_token,
+                mal_refresh_token: tokenData.refresh_token,
+                mal_token_expires_at: expiresAt
+            });
+
+            console.log("[Auth] Token refreshed successfully.");
+            return tokenData.access_token;
+        } catch (err) {
+            console.error("[Auth] Failed to refresh token:", err);
+            // Purge invalid tokens to force a clean manual login on next attempt
+            await chrome.storage.local.remove(['mal_access_token', 'mal_refresh_token', 'mal_token_expires_at']);
+            throw err;
+        }
+    }
+
+    /**
+     * Initiates the OAuth2 flow to get an access token, or retrieves/refreshes the existing one.
      * @returns {Promise<string>} The access token required for write actions
      */
     static async getAccessToken() {
         return new Promise((resolve, reject) => {
-            chrome.storage.local.get(['mal_access_token'], async (res) => {
-                if (res.mal_access_token) {
-                    return resolve(res.mal_access_token);
+            chrome.storage.local.get(['mal_access_token', 'mal_refresh_token', 'mal_token_expires_at'], async (res) => {
+                
+                // 1. Check if token exists and is still valid
+                if (res.mal_access_token && res.mal_token_expires_at) {
+                    if (Date.now() < res.mal_token_expires_at) {
+                        return resolve(res.mal_access_token);
+                    } else if (res.mal_refresh_token) {
+                        // Token expired, attempt silent refresh
+                        try {
+                            const newToken = await this.refreshAccessToken(res.mal_refresh_token);
+                            return resolve(newToken);
+                        } catch (refreshErr) {
+                            return reject(refreshErr);
+                        }
+                    }
                 }
                 
+                // 2. Perform full interactive login if no token or refresh failed
                 const codeVerifier = this.generateRandomString(128);
                 const redirectUri = chrome.identity.getRedirectURL();
                 
@@ -85,9 +146,14 @@ export class AuthService {
 
                         if (tokenData.access_token) {
                             console.log("[Auth] Token obtido com sucesso!");
+                            
+                            const expiresInMs = (tokenData.expires_in - 300) * 1000;
+                            const expiresAt = Date.now() + expiresInMs;
+
                             await chrome.storage.local.set({ 
                                 mal_access_token: tokenData.access_token,
-                                mal_refresh_token: tokenData.refresh_token 
+                                mal_refresh_token: tokenData.refresh_token,
+                                mal_token_expires_at: expiresAt
                             });
                             resolve(tokenData.access_token);
                         } else {

@@ -20,7 +20,6 @@ export class ReleaseMonitorService {
 
         await chrome.alarms.clear(MONITOR_CONFIG.ALARM_NAME);
 
-        // Apenas cria alarme se houver pelo menos um site ativo
         if (hasActiveSites) {
             chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { 
                 delayInMinutes: 1, 
@@ -40,27 +39,22 @@ export class ReleaseMonitorService {
         if (!username || activeSites.length === 0) return;
 
         try {
-            // Requisita a lista do utilizador ao MAL
-            const allItems = await MalService.fetchAllUserItems(username);
-            const activeItemsList = allItems.filter(item => item.status === 1); 
+            // HIGH PERFORMANCE CHANGE: Request ONLY active items instead of entire database
+            const activeItemsList = await MalService.fetchActiveItemsOnly(username);
             
             let notificationsQueue = [];
             let stateChanged = false;
 
-            // Resolve o Scraping de todos os sites em paralelo, sem que um bloqueie os outros
             const siteFetches = activeSites.map(site => this.fetchSiteContent(site.url).then(html => ({ site, html })));
             const fetchResults = await Promise.allSettled(siteFetches);
 
-            // Processa o HTML recolhido de cada site ativo
             for (const result of fetchResults) {
                 if (result.status !== 'fulfilled' || !result.value.html) continue;
                 
                 const { site, html } = result.value;
 
                 for (const item of activeItemsList) {
-                    const isAnime = item.type === 'anime';
-                    const progressField = isAnime ? 'num_watched_episodes' : 'num_read_chapters';
-                    const nextProgress = (item[progressField] || 0) + 1;
+                    const nextProgress = (item.progress || 0) + 1;
                     const uniqueItemId = `${item.type}_${item.id}`;
 
                     if (this.isItemSeen(seenEpisodes, uniqueItemId, nextProgress)) continue; 
@@ -127,7 +121,7 @@ export class ReleaseMonitorService {
 
     static async fetchSiteContent(url) {
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 15000); // 15s timeout
+        const id = setTimeout(() => controller.abort(), 15000);
         try {
             const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
             clearTimeout(id);
@@ -135,9 +129,6 @@ export class ReleaseMonitorService {
         } catch (e) { return ""; }
     }
 
-    /**
-     * Strict Regex Logic to prevent cross-contamination between different anime titles.
-     */
     static detectRelease(html, title, progressNumber) {
         if (!html || !title) return false;
 
@@ -164,6 +155,9 @@ export class ReleaseMonitorService {
         } catch (e) { return false; }
     }
 
+    /**
+     * Handles sequential batching of notifications to prevent data loss in Storage API.
+     */
     static async sendNotification(items) {
         const lang = await I18nService.getCurrentLang();
         
@@ -174,12 +168,12 @@ export class ReleaseMonitorService {
         chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); 
         
         const storageRes = await chrome.storage.local.get(['notificationMeta']);
-        const notificationMeta = storageRes.notificationMeta || {};
+        let notificationMeta = storageRes.notificationMeta || {};
 
-        items.forEach(async item => {
+        // CRITICAL FIX: Replaced async forEach with for...of to prevent race conditions
+        for (const item of items) {
             const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
             const prefix = item.type === 'anime' ? 'Ep' : 'Ch';
-            // Adicionamos a fonte da notificação para clareza
             const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
             
             chrome.notifications.create(notifId, {
@@ -194,9 +188,8 @@ export class ReleaseMonitorService {
                 ]
             });
 
-            // Gravamos metadados expandidos
             notificationMeta[notifId] = { ...item, monitorUrl: item.siteUrl };
-        });
+        }
 
         const keys = Object.keys(notificationMeta);
         if (keys.length > 50) delete notificationMeta[keys[0]];
@@ -210,7 +203,7 @@ export class ReleaseMonitorService {
         const newEntries = items.map(item => {
             return { 
                 text: `${item.title} - ${item.type === 'anime' ? 'Ep' : 'Ch'} ${item.nextEp}`, 
-                url: item.siteUrl || item.url, // fallback legacy
+                url: item.siteUrl || item.url,
                 siteName: item.siteName || 'Unknown Site',
                 id: item.id,
                 type: item.type,
