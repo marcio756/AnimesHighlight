@@ -1,0 +1,11 @@
+{
+  "name": "mal-highlighter",
+  "version": "1.7.1",
+  "description": "Universal MAL Highlighter - Bundler Configuration",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}

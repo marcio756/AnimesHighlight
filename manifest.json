@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Universal MAL Highlighter",
-  "version": "1.7",
+  "version": "1.7.1",
   "description": "Automatically highlights anime/manga cards and monitors new releases.",
   "permissions": ["storage", "alarms", "notifications", "tabs", "identity"],
   "host_permissions": [
@@ -28,17 +28,15 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": [
-        "src/content/content-loader.js"
-      ],
-      "css": ["src/content/styles.css"]
+      "js": ["dist/content.bundle.js"],
+      "css": ["src/content/styles.css"],
+      "all_frames": false
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "src/common/*.js",
-        "src/content/*.js"
+        "src/common/*.js"
       ],
       "matches": ["<all_urls>"]
     }
