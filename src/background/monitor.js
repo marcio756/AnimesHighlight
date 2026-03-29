@@ -166,9 +166,6 @@ export class ReleaseMonitorService {
             
             if (!pattern.test(fullyCleanedText)) return null;
 
-            // =========================================================
-            // INÍCIO DO MODO DEBUG - Visível na consola do Service Worker
-            // =========================================================
             console.group(`[MAL Highlighter Debug] Lançamento confirmado no HTML: ${title} (Ep/Cap ${progressNumber})`);
             console.log("Site Alvo:", fallbackUrl);
 
@@ -214,8 +211,6 @@ export class ReleaseMonitorService {
                     score += 5;
                 }
 
-                console.log(`  🔎 [Candidato] Score: ${score.toString().padStart(2, '0')} | URL: ${href}`);
-
                 if (score > bestScore && score >= 10) { 
                     bestScore = score;
                     bestHref = href;
@@ -224,9 +219,6 @@ export class ReleaseMonitorService {
             
             console.log(`🏆 [VENCEDOR] Score Final: ${bestScore} | URL Selecionado: ${bestHref}`);
             console.groupEnd();
-            // =========================================================
-            // FIM DO MODO DEBUG
-            // =========================================================
 
             try {
                 return new URL(bestHref, fallbackUrl).href;
@@ -253,7 +245,9 @@ export class ReleaseMonitorService {
 
         for (const item of items) {
             const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
-            const prefix = item.type === 'anime' ? 'Ep' : 'Ch';
+            
+            // INTEGRAÇÃO DE TRADUÇÃO AQUI
+            const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
             const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
             
             chrome.notifications.create(notifId, {
@@ -275,14 +269,16 @@ export class ReleaseMonitorService {
         if (keys.length > 50) delete notificationMeta[keys[0]];
         await chrome.storage.local.set({ notificationMeta });
 
-        await this.saveToHistory(items);
+        await this.saveToHistory(items, lang);
     }
 
-    static async saveToHistory(items) {
+    static async saveToHistory(items, lang) {
         const timestamp = Date.now();
         const newEntries = items.map(item => {
+            // INTEGRAÇÃO DE TRADUÇÃO AQUI
+            const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
             return { 
-                text: `${item.title} - ${item.type === 'anime' ? 'Ep' : 'Ch'} ${item.nextEp}`, 
+                text: `${item.title} - ${prefix} ${item.nextEp}`, 
                 url: item.siteUrl || item.url,
                 siteName: item.siteName || 'Unknown Site',
                 id: item.id,

@@ -3,6 +3,7 @@
 import { MalService } from './api.js';
 import { ReleaseMonitorService, MONITOR_CONFIG } from './monitor.js';
 import { SyncService } from './sync.js'; 
+import { I18nService } from '../common/i18n.js';
 
 chrome.storage.local.get(['lastMonitorCheck'], (res) => {
     const now = Date.now();
@@ -89,21 +90,26 @@ chrome.notifications.onClicked.addListener((notificationId) => {
     chrome.notifications.clear(notificationId);
 });
 
-chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-    chrome.storage.local.get(['notificationMeta'], (res) => {
+chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
+    chrome.storage.local.get(['notificationMeta'], async (res) => {
         const meta = res.notificationMeta && res.notificationMeta[notificationId];
         if (!meta) return;
 
         if (buttonIndex === 0) {
             if (meta.monitorUrl) chrome.tabs.create({ url: meta.monitorUrl });
         } else if (buttonIndex === 1) {
+            const lang = await I18nService.getCurrentLang();
             const field = meta.type === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
+            
             MalService.updateListEntry(meta.id, meta.type, { [field]: meta.nextEp })
                 .then(() => {
+                    let msg = I18nService.get('notifMarkedSeen', lang);
+                    msg = msg.replace('{title}', meta.title).replace('{ep}', meta.nextEp);
+
                     chrome.notifications.create({
                         type: 'basic', iconUrl: 'icon.png',
                         title: 'MAL Highlighter',
-                        message: `Successfully marked ${meta.title} episode ${meta.nextEp} as seen.`, priority: 1
+                        message: msg, priority: 1
                     });
                 })
                 .catch(err => console.error("[Sync-Back] Update failed", err));
@@ -119,8 +125,6 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
-    // REMOVIDO: chrome.storage.local.remove('seenEpisodes');
-    
     SyncService.initListeners();
     SyncService.pullFromCloud();
     

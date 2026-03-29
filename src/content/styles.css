@@ -77,7 +77,7 @@
     box-shadow: var(--mal-shadow);
     z-index: 2147483647; 
     font-family: 'Segoe UI', system-ui, sans-serif;
-    width: 240px; 
+    width: 260px; /* Aumentado para melhor acomodar os campos */
     border: 1px solid var(--mal-panel-border);
     opacity: 0; transform: translateY(20px) scale(0.95);
     transition: all 0.35s var(--mal-transition);
@@ -123,6 +123,7 @@
     background: var(--mal-progress-bg); padding: 6px 10px; 
     border-radius: 6px; border: 1px solid var(--mal-panel-border);
     transition: background-color 0.3s ease;
+    gap: 8px; /* Garantia que os inputs nunca sobrepõem os botões */
 }
 
 /* Animação visual de sucesso na Optimistic UI */
@@ -140,7 +141,8 @@
     font-size: 11px; color: var(--text-muted); font-weight: 600;
 }
 .mal-progress-input {
-    width: 38px; background: var(--mal-input-bg); border: 1px solid var(--mal-panel-border);
+    width: 50px; /* Aumentado para caber confortavelmente 4 dígitos */
+    background: var(--mal-input-bg); border: 1px solid var(--mal-panel-border);
     color: var(--mal-panel-text); border-radius: 4px; padding: 2px 4px;
     font-size: 13px; font-weight: 700; text-align: center;
     appearance: textfield; outline: none; transition: border-color 0.2s, box-shadow 0.2s;

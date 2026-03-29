@@ -87,12 +87,16 @@ export class PopupUI {
         }, 3000);
     }
 
-    static showProfile(username, avatarUrl, avatarEl, textEl, container, skeletonEl) {
+    static showProfile(username, avatarUrl, avatarEl, textEl, container, skeletonEl, currentLang) {
         if (!container || !avatarEl || !textEl) return;
         if (skeletonEl) skeletonEl.style.display = 'none';
         
         avatarEl.src = avatarUrl;
-        textEl.innerText = `Welcome, ${username}!`;
+        
+        // INTEGRAÇÃO DE TRADUÇÃO AQUI
+        let msg = I18nService.get('profileWelcome', currentLang) || `Welcome, ${username}!`;
+        textEl.innerText = msg.replace('{user}', username);
+        
         container.style.display = 'flex';
     }
 
@@ -181,7 +185,7 @@ export class PopupUI {
         });
     }
 
-    static renderNotifications(logs, listEl, emptyEl, clearBtn, filterValue, onUpdateLogs) {
+    static renderNotifications(logs, listEl, emptyEl, clearBtn, filterValue, currentLang, onUpdateLogs) {
         if (!listEl) return;
         listEl.innerHTML = "";
 
@@ -197,6 +201,10 @@ export class PopupUI {
         clearBtn.style.display = 'block';
 
         const closeIconSVG = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+        
+        // INTEGRAÇÃO DE TRADUÇÃO AQUI
+        const btnOpenText = I18nService.get('notifBtnOpen', currentLang);
+        const btnSearchingText = I18nService.get('notifBtnSearching', currentLang);
 
         filteredLogs.forEach((log) => {
             const originalIndex = logs.indexOf(log); 
@@ -217,7 +225,7 @@ export class PopupUI {
                                 <span class="notif-date" style="font-size: 10px; color: var(--text-muted);">${date}</span>
                                 ${siteTag}
                             </div>
-                            <button class="open-notif-btn" data-index="${originalIndex}" data-url="${actionUrl}" style="background-color: #48bb78; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;">Abrir</button>
+                            <button class="open-notif-btn" data-index="${originalIndex}" data-url="${actionUrl}" style="background-color: #48bb78; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;">${btnOpenText}</button>
                         </div>
                     </div>
                 </div>
@@ -225,7 +233,6 @@ export class PopupUI {
             listEl.appendChild(li);
         });
 
-        // 1. Lógica de Remoção
         const handleRemove = (e) => {
             const btn = e.currentTarget;
             const idx = parseInt(btn.getAttribute('data-index'));
@@ -241,7 +248,6 @@ export class PopupUI {
 
         listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
 
-        // 2. Lógica de Clique com LIVE SCANNER e Logs no DevTools
         listEl.querySelectorAll('.open-notif-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const button = e.currentTarget;
@@ -254,11 +260,10 @@ export class PopupUI {
                     const path = urlObj.pathname;
                     
                     if (path === '/' || path.length < 5 || !path.match(/(ep|cap|ver|watch|ler|chapter|episodio)/i)) {
-                        button.innerText = "A procurar...";
+                        button.innerText = btnSearchingText;
                         button.style.opacity = "0.7";
                         button.style.pointerEvents = "none";
                         
-                        // FIX: Fallback seguro caso o title falhe no log guardado
                         const searchBase = log.title || log.text || "";
                         
                         console.group(`[Live Scan] Procurando link exato para: ${searchBase} (Alvo: Ep/Cap ${log.ep})`);
@@ -279,7 +284,6 @@ export class PopupUI {
                         let bestScore = 0;
                         let bestHref = targetUrl;
                         
-                        // Limpa o termo de pesquisa, removendo também palavras inúteis para a pontuação como 'ep' ou 'ch'
                         const titleWords = searchBase.toLowerCase()
                             .replace(/[^a-z0-9 ]/g, ' ')
                             .split(' ')
@@ -328,7 +332,7 @@ export class PopupUI {
                 }
 
                 window.open(targetUrl, '_blank');
-                button.innerText = "Abrir";
+                button.innerText = btnOpenText;
                 button.style.opacity = "1";
                 button.style.pointerEvents = "auto";
             });

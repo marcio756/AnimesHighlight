@@ -245,7 +245,9 @@ export class UIManager {
         if (data && data.status) {
             if (data.progress === undefined) data.progress = 0;
             
-            const prefixStr = mediaType === 'manga' ? 'Ch:' : 'Ep:';
+            // INTEGRAÇÃO DE TRADUÇÃO AQUI
+            const prefixStr = mediaType === 'manga' ? I18nService.get('prefixCh', this.currentLanguage) + ':' : I18nService.get('prefixEp', this.currentLanguage) + ':';
+            
             const field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
             const maxVal = data.total > 0 ? data.total : null;
             
@@ -311,11 +313,9 @@ export class UIManager {
             quickAddBtn.onclick = () => updateProgressOptimistic(data.progress + 1);
             quickDecBtn.onclick = () => updateProgressOptimistic(data.progress - 1);
 
-            // Substituir listeners antigos para evitar duplicação em re-renders do painel
             const newChangeHandler = (e) => updateProgressOptimistic(parseInt(e.target.value, 10));
             const newKeyHandler = (e) => { if (e.key === 'Enter') inputEl.blur(); };
             
-            // Clone and replace to clear old event listeners
             const newInputEl = inputEl.cloneNode(true);
             inputEl.parentNode.replaceChild(newInputEl, inputEl);
             

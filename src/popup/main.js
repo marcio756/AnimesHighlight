@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const historyFilterTrigger = document.getElementById('historyFilterTrigger');
     const historyFilterLabel = document.getElementById('historyFilterLabel');
     const historyFilterOptions = document.getElementById('historyFilterOptions');
-    let currentFilterValue = 'all'; // Guarda o estado do filtro atual
+    let currentFilterValue = 'all'; 
 
     const langSelect = document.getElementById('langSelect');
     const checkPanelEnabled = document.getElementById('panelEnabled');
@@ -83,9 +83,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.storage.local.set({ theme: newTheme });
     });
 
-    // =======================================================
-    // LÓGICA DO CUSTOM DROPDOWN (HISTÓRICO)
-    // =======================================================
     historyFilterTrigger.addEventListener('click', () => {
         historyFilterWrapper.classList.toggle('open');
     });
@@ -101,10 +98,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentFilterValue = newVal;
             historyFilterWrapper.classList.remove('open');
             renderLogs();
-            updateFilter(); // Re-renderiza para atualizar a classe "selected"
+            updateFilter(); 
         });
     };
-    // =======================================================
 
     const syncColorVisibility = () => {
         hlStatusCheckboxes.forEach(cb => {
@@ -118,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveSitesState = (triggerAlarmRefresh = true) => {
         chrome.storage.local.set({ monitoredSites: globalSites }, () => {
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            updateFilter(); // Substitui a chamada antiga
+            updateFilter(); 
             if (triggerAlarmRefresh) chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
         });
     };
@@ -134,9 +130,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    // Atualizado para usar currentFilterValue
     const renderLogs = () => {
-        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, currentFilterValue, (updatedLogs) => {
+        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, currentFilterValue, currentLang, (updatedLogs) => {
             globalLogs = updatedLogs;
             chrome.storage.local.set({ notificationLog: globalLogs }, () => renderLogs());
         });
@@ -148,7 +143,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             globalLogs = result.notificationLog || [];
             
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            updateFilter(); // Substitui a chamada antiga
+            updateFilter(); 
             renderLogs();
             PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
         });
@@ -211,7 +206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     ], (res) => {
         if (res.malUsername) {
             inputUser.value = res.malUsername;
-            if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea);
+            if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
         }
         if (res.extensionLang) langSelect.value = res.extensionLang;
         if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
@@ -242,7 +237,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const siteName = urlObj.hostname.replace('www.', '');
 
             if (globalSites.some(s => s.url === formattedUrl)) {
-                PopupUI.updateStatus(statusMonitor, "Site already exists.", "error");
+                // INTEGRAÇÃO DE TRADUÇÃO AQUI
+                PopupUI.updateStatus(statusMonitor, I18nService.get('siteExists', currentLang), "error");
                 return;
             }
 
@@ -290,7 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, () => {
             currentLang = selectedLang;
             I18nService.translateDOM(currentLang); 
-            updateFilter(); // Atualiza a label do filtro de histórico caso o idioma mude
+            updateFilter(); 
             PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
             
             saveSettingsBtn.innerText = I18nService.get('btnSaveSettings', currentLang);
@@ -327,7 +323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (malResponse && malResponse.success) {
                     chrome.storage.local.set({ malUsername: username, malAvatar: imageUrl }, () => {
                         PopupUI.updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
-                        PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea, profileSkeleton);
+                        PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
                         saveProfileBtn.disabled = false;
                         localStorage.removeItem('mal_v35_full_list'); 
                     });

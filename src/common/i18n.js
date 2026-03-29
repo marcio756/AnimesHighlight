@@ -19,6 +19,7 @@ const DICTIONARY = {
         placeholderSiteUrl: "https://example.com/latest",
         btnAddSite: "Add Site",
         siteListEmpty: "No sites added yet. Add a URL above to start monitoring.",
+        siteExists: "Site already exists.",
         
         emptyHistory: "No new releases detected yet.",
         btnClearHistory: "Clear History",
@@ -68,6 +69,9 @@ const DICTIONARY = {
         notifMultiple: "New Releases Available!",
         notifBtnWatch: "Watch Now",
         notifBtnMarkSeen: "Mark as Seen",
+        notifBtnSearching: "Searching...",
+        notifBtnOpen: "Open",
+        notifMarkedSeen: "Successfully marked {title} progress {ep} as seen.",
 
         statusWatching: "WATCHING",
         statusReading: "READING",
@@ -82,7 +86,11 @@ const DICTIONARY = {
         welcomeStep1Desc: "Click the extension icon in your browser toolbar, enter your MyAnimeList username, and click 'Verify & Save'.",
         welcomeStep2Title: "2. Enjoy the Magic",
         welcomeStep2Desc: "Visit your favorite anime or manga sites. The extension will automatically highlight covers based on your list and show a floating panel you can drag around!",
-        welcomeStartBtn: "Close and Start"
+        welcomeStartBtn: "Close and Start",
+
+        prefixEp: "Ep",
+        prefixCh: "Ch",
+        profileWelcome: "Welcome, {user}!"
     },
     pt: {
         appTitle: "Realçador MAL",
@@ -99,6 +107,7 @@ const DICTIONARY = {
         placeholderSiteUrl: "https://exemplo.com/lancamentos",
         btnAddSite: "Adicionar Site",
         siteListEmpty: "Nenhum site adicionado. Adiciona um URL acima para começar.",
+        siteExists: "Este site já existe na lista.",
         
         emptyHistory: "Ainda não foram detetados novos lançamentos.",
         btnClearHistory: "Limpar Histórico",
@@ -148,6 +157,9 @@ const DICTIONARY = {
         notifMultiple: "Novos Lançamentos Disponíveis!",
         notifBtnWatch: "Assistir Agora",
         notifBtnMarkSeen: "Marcar como Visto",
+        notifBtnSearching: "A procurar...",
+        notifBtnOpen: "Abrir",
+        notifMarkedSeen: "Marcaste {title} cap/ep {ep} como visto com sucesso.",
 
         statusWatching: "A VER",
         statusReading: "A LER",
@@ -162,7 +174,11 @@ const DICTIONARY = {
         welcomeStep1Desc: "Clica no ícone da extensão na barra do teu navegador, insere o teu nome de utilizador do MyAnimeList e clica em 'Verificar e Guardar'.",
         welcomeStep2Title: "2. Desfruta da Magia",
         welcomeStep2Desc: "Visita os teus sites favoritos de anime ou manga. A extensão irá realçar automaticamente as capas com base na tua lista e mostrar um painel flutuante que podes arrastar!",
-        welcomeStartBtn: "Fechar e Começar"
+        welcomeStartBtn: "Fechar e Começar",
+
+        prefixEp: "Ep",
+        prefixCh: "Cap",
+        profileWelcome: "Bem-vindo, {user}!"
     }
 };
 
