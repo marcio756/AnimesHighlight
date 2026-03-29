@@ -1,7 +1,7 @@
 // src/content/utils.js
 
 export const CONFIG = {
-    CACHE_KEY: 'mal_v35_full_list', 
+    CACHE_KEY: 'mal_v36_full_list',
     CACHE_DURATION: 1000 * 60 * 15, 
     DEBOUNCE_DELAY: 500, 
     MIN_DEBOUNCE_DELAY: 100,
@@ -55,8 +55,8 @@ export class ProgressExtractor {
             return parseInt(match[2], 10);
         }
         
-        // Fallback para URLs que terminam diretamente no número exato: "one-piece-1099"
-        const endNumMatch = clean.match(/-0*(\d+)\/?$/);
+        // Fallback para URLs que terminam diretamente no número exato: "one-piece-1099" ou "one-piece/1099"
+        const endNumMatch = clean.match(/(?:-|\/)\s*0*(\d+)\/?$/);
         if (endNumMatch && endNumMatch[1]) {
             return parseInt(endNumMatch[1], 10);
         }

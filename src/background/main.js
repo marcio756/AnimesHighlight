@@ -4,9 +4,16 @@ import { MalService } from './api.js';
 import { ReleaseMonitorService, MONITOR_CONFIG } from './monitor.js';
 import { SyncService } from './sync.js'; 
 
-/**
- * Escutador de Rotas de Mensagens
- */
+chrome.storage.local.get(['lastMonitorCheck'], (res) => {
+    const now = Date.now();
+    const lastCheck = res.lastMonitorCheck || 0;
+    const intervalMs = MONITOR_CONFIG.CHECK_INTERVAL_MIN * 60 * 1000;
+    
+    if (now - lastCheck > intervalMs) {
+        ReleaseMonitorService.checkNewReleases();
+    }
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "FETCH_MAL_LIST") {
         MalService.fetchAllUserItems(request.username)
@@ -47,7 +54,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
-    // --- Rotas de Cloud Sync para a Interface do Utilizador ---
     if (request.action === "GET_SYNC_STATUS") {
         SyncService.authenticate(false)
             .then(user => sendResponse({ loggedIn: true, email: user.email }))
@@ -108,11 +114,12 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
 
 chrome.runtime.onStartup.addListener(() => {
     ReleaseMonitorService.setupAlarm();
+    ReleaseMonitorService.checkNewReleases(); 
     SyncService.pullFromCloud(); 
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
-    chrome.storage.local.remove('seenEpisodes'); 
+    // REMOVIDO: chrome.storage.local.remove('seenEpisodes');
     
     SyncService.initListeners();
     SyncService.pullFromCloud();
@@ -130,10 +137,15 @@ chrome.runtime.onInstalled.addListener((details) => {
                 chrome.storage.local.set({ monitoredSites: [defaultSite] }, () => {
                     chrome.storage.local.remove(['monitorUrl', 'monitorEnabled']); 
                     ReleaseMonitorService.setupAlarm();
+                    ReleaseMonitorService.checkNewReleases(); 
                 });
-            } catch(e) { ReleaseMonitorService.setupAlarm(); }
+            } catch(e) { 
+                ReleaseMonitorService.setupAlarm(); 
+                ReleaseMonitorService.checkNewReleases();
+            }
         } else {
             ReleaseMonitorService.setupAlarm();
+            ReleaseMonitorService.checkNewReleases(); 
         }
     });
 

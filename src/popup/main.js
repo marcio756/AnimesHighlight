@@ -159,14 +159,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const updateSyncUI = (isLoggedIn, email) => {
         if (isLoggedIn) {
+            syncStatusText.removeAttribute('data-i18n');
             syncStatusText.innerText = email || I18nService.get('syncLoggedIn', currentLang);
             syncStatusText.style.color = '#48bb78'; 
+            
+            syncActionBtn.setAttribute('data-i18n', 'btnLogout');
             syncActionBtn.innerText = I18nService.get('btnLogout', currentLang);
             syncActionBtn.className = "action-btn btn-danger";
             syncWarningBox.style.display = 'none'; 
         } else {
+            syncStatusText.setAttribute('data-i18n', 'syncNotLoggedIn');
             syncStatusText.innerText = I18nService.get('syncNotLoggedIn', currentLang);
             syncStatusText.style.color = 'var(--text-muted)';
+            
+            syncActionBtn.setAttribute('data-i18n', 'btnLogin');
             syncActionBtn.innerText = I18nService.get('btnLogin', currentLang);
             syncActionBtn.className = "action-btn";
             syncWarningBox.style.display = 'block'; 
@@ -180,7 +186,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     syncActionBtn.addEventListener('click', () => {
         ProgressService.start();
-        if (syncActionBtn.innerText === I18nService.get('btnLogout', currentLang)) {
+        if (syncActionBtn.getAttribute('data-i18n') === 'btnLogout') {
             syncActionBtn.innerText = "...";
             chrome.runtime.sendMessage({ action: "SYNC_LOGOUT" }, (res) => {
                 updateSyncUI(false);

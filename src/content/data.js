@@ -1,3 +1,5 @@
+// src/content/data.js
+
 /**
  * Data Storage and API Communication Layer
  * @description Isolates caching logic. 
@@ -49,6 +51,37 @@ export class DataManager {
     }
 
     /**
+     * NOVA FUNÇÃO: Atualiza a cache local diretamente sem forçar um novo fetch do MAL.
+     * Resolve o problema da latência da API pública do MyAnimeList que demora a refletir atualizações.
+     */
+    static async updateCacheItem(id, type, newData) {
+        return new Promise((resolve) => {
+            chrome.storage.local.get([CONFIG.CACHE_KEY], (res) => {
+                const cachedData = res[CONFIG.CACHE_KEY];
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        let updated = false;
+                        for (let [title, items] of parsed.data) {
+                            for (let item of items) {
+                                if (item.id === id && item.type === type) {
+                                    Object.assign(item, newData);
+                                    updated = true;
+                                }
+                            }
+                        }
+                        if (updated) {
+                            chrome.storage.local.set({ [CONFIG.CACHE_KEY]: JSON.stringify(parsed) }, resolve);
+                            return;
+                        }
+                    } catch (e) {}
+                }
+                resolve();
+            });
+        });
+    }
+
+    /**
      * Fetches user list with built-in cache validation across all websites.
      */
     static async getUserList() {
@@ -85,7 +118,8 @@ export class DataManager {
                                 score: item.score,
                                 rawTitle: item.title,
                                 type: item.type,
-                                progress: item.progress 
+                                progress: item.progress,
+                                total: item.total
                             });
                         });
                         

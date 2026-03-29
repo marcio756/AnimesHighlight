@@ -217,7 +217,7 @@ export class PopupUI {
                                 <span class="notif-date" style="font-size: 10px; color: var(--text-muted);">${date}</span>
                                 ${siteTag}
                             </div>
-                            <a href="${actionUrl}" target="_blank" class="open-notif-btn" data-index="${originalIndex}" style="background-color: #48bb78; color: white; padding: 4px 12px; border-radius: 4px; font-size: 11px; text-decoration: none; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;">Abrir</a>
+                            <button class="open-notif-btn" data-index="${originalIndex}" data-url="${actionUrl}" style="background-color: #48bb78; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;">Abrir</button>
                         </div>
                     </div>
                 </div>
@@ -225,6 +225,7 @@ export class PopupUI {
             listEl.appendChild(li);
         });
 
+        // 1. Lógica de Remoção
         const handleRemove = (e) => {
             const btn = e.currentTarget;
             const idx = parseInt(btn.getAttribute('data-index'));
@@ -239,5 +240,98 @@ export class PopupUI {
         };
 
         listEl.querySelectorAll('.delete-notif-btn').forEach(btn => btn.addEventListener('click', handleRemove));
+
+        // 2. Lógica de Clique com LIVE SCANNER e Logs no DevTools
+        listEl.querySelectorAll('.open-notif-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const button = e.currentTarget;
+                const idx = parseInt(button.getAttribute('data-index'));
+                const log = logs[idx];
+                let targetUrl = button.getAttribute('data-url');
+
+                try {
+                    const urlObj = new URL(targetUrl);
+                    const path = urlObj.pathname;
+                    
+                    if (path === '/' || path.length < 5 || !path.match(/(ep|cap|ver|watch|ler|chapter|episodio)/i)) {
+                        button.innerText = "A procurar...";
+                        button.style.opacity = "0.7";
+                        button.style.pointerEvents = "none";
+                        
+                        // FIX: Fallback seguro caso o title falhe no log guardado
+                        const searchBase = log.title || log.text || "";
+                        
+                        console.group(`[Live Scan] Procurando link exato para: ${searchBase} (Alvo: Ep/Cap ${log.ep})`);
+                        console.log("A aceder ao site base:", targetUrl);
+                        
+                        const res = await fetch(targetUrl);
+                        const html = await res.text();
+                        
+                        const hrefRegex = /href=["']([^"']+)["']/gi;
+                        const links = new Set();
+                        let match;
+                        while ((match = hrefRegex.exec(html)) !== null) {
+                            links.add(match[1]);
+                        }
+                        
+                        console.log(`Encontrados ${links.size} links totais na página principal do site.`);
+                        
+                        let bestScore = 0;
+                        let bestHref = targetUrl;
+                        
+                        // Limpa o termo de pesquisa, removendo também palavras inúteis para a pontuação como 'ep' ou 'ch'
+                        const titleWords = searchBase.toLowerCase()
+                            .replace(/[^a-z0-9 ]/g, ' ')
+                            .split(' ')
+                            .filter(w => w.length > 2 && !['ep', 'cap', 'ch', 'episodio', 'capitulo'].includes(w));
+                        
+                        for (let href of links) {
+                            const hrefLower = href.toLowerCase();
+                            if (hrefLower.includes('.css') || hrefLower.includes('.js')) continue;
+                            
+                            let score = 0;
+                            const numPattern = new RegExp(`[-_/(]0*${log.ep}(/|\\?|\\b|$)`, 'i');
+                            const numPattern2 = new RegExp(`\\b(ep|cap|episodio|chapter|ch)[-_]?0*${log.ep}\\b`, 'i');
+                            
+                            if (numPattern.test(hrefLower) || numPattern2.test(hrefLower)) {
+                                score += 10;
+                            } else {
+                                continue; 
+                            }
+                            
+                            let wordsMatched = 0;
+                            for (const word of titleWords) {
+                                if (hrefLower.includes(word)) wordsMatched++;
+                            }
+                            score += (wordsMatched * 2);
+                            
+                            console.log(`  🔎 Avaliando: ${href} | Pontuação: ${score}`);
+                            
+                            if (score > bestScore && score >= 12) {
+                                bestScore = score;
+                                bestHref = href;
+                            }
+                        }
+                        
+                        if (bestScore > 0) {
+                            targetUrl = new URL(bestHref, targetUrl).href;
+                            console.log(`✅ Sucesso! Vencedor ao vivo: ${targetUrl}`);
+                            log.url = targetUrl; 
+                            if (onUpdateLogs) onUpdateLogs(logs); 
+                        } else {
+                            console.warn("⚠️ Não foi possível deduzir o link ao vivo. A abrir a homepage.");
+                        }
+                        console.groupEnd();
+                    }
+                } catch(err) {
+                    console.error("[Live Scan] Erro durante o scan:", err);
+                }
+
+                window.open(targetUrl, '_blank');
+                button.innerText = "Abrir";
+                button.style.opacity = "1";
+                button.style.pointerEvents = "auto";
+            });
+        });
     }
 }

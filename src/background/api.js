@@ -105,6 +105,7 @@ export class MalService {
             score: item.score,
             type: type,
             progress: type === 'anime' ? (item.num_watched_episodes || 0) : (item.num_read_chapters || 0),
+            total: type === 'anime' ? (item.anime_num_episodes || 0) : (item.manga_num_chapters || 0), // NOVO: Captura o limite máximo
             // Legacy mapping for backwards compatibility
             num_watched_episodes: item.num_watched_episodes || 0,
             num_read_chapters: item.num_read_chapters || 0

@@ -38,11 +38,9 @@ class MalController {
             await UIManager.initLanguage();
             await UIManager.initTheming(); 
 
-            // Escutador Reativo: Mantém as configurações sincronizadas sem precisar de dar F5 na página
             chrome.storage.onChanged.addListener((changes, area) => {
                 if (area === 'local' && changes.autoUpdateProgress !== undefined) {
                     this.autoUpdateProgress = changes.autoUpdateProgress.newValue === true;
-                    // Se a opção foi ativada agora mesmo e já estamos na página do episódio, força a verificação
                     if (this.autoUpdateProgress) {
                         const currentMediaType = ContextAnalyzer.guessContentType();
                         let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
@@ -239,16 +237,16 @@ class MalController {
             const isInUrl = urlPath.includes(titleClean.replace(/-/g, "")) && titleClean.length > 5;
             
             if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
-                if (match && !document.getElementById('malControlPanel')?.classList.contains('visible')) {
-                    UIManager.showPanel(match.rawTitle || text, match);
+                if (match) {
+                    this.attemptAutoUpdate(match, currentMediaType); // BUG FIX: Atualizar ao detetar o elemento na página
+                    if (!document.getElementById('malControlPanel')?.classList.contains('visible')) {
+                        UIManager.showPanel(match.rawTitle || text, match);
+                    }
                 }
             }
         }
     }
 
-    /**
-     * Tenta atualizar o MyAnimeList de forma assíncrona baseada na leitura do site atual
-     */
     attemptAutoUpdate(match, currentMediaType) {
         if (!this.autoUpdateProgress || !match) return;
         if (this.autoUpdatedId === match.id) return; 
@@ -258,7 +256,7 @@ class MalController {
 
         const currentNum = ProgressExtractor.extract(url, currentMediaType) || ProgressExtractor.extract(title, currentMediaType);
 
-        if (currentNum && currentNum > (match.progress || 0)) {
+        if (currentNum !== null && currentNum > match.progress) {
             console.log(`[MAL Highlighter] Auto-updating ${match.rawTitle} to ${currentMediaType === 'manga' ? 'Chapter' : 'Episode'} ${currentNum}`);
             this.autoUpdatedId = match.id; 
 
@@ -272,12 +270,11 @@ class MalController {
             }, (response) => {
                 if (response && response.success) {
                     match.progress = currentNum;
-                    DataManager.invalidateCache();
+                    DataManager.updateCacheItem(match.id, currentMediaType, { progress: currentNum });
                     
-                    const progressText = document.getElementById('malProgressText');
-                    if (progressText) {
-                        const prefix = currentMediaType === 'manga' ? 'Ch' : 'Ep';
-                        progressText.innerText = `${prefix}: ${currentNum}`;
+                    const progressInput = document.getElementById('malProgressInput');
+                    if (progressInput) {
+                        progressInput.value = currentNum;
                     }
                 }
             });

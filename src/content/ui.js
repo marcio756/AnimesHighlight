@@ -1,7 +1,9 @@
+// src/content/ui.js
+
 /**
  * UI Presentation Layer
  * @description Manages all DOM manipulations, CSS injections, and floating panel generation.
- * Features Optimistic UI updates, Premium Glassmorphism, and Custom Dropdown Components.
+ * Features Optimistic UI updates, Premium Glassmorphism, Custom Dropdown Components, and Editable Progress Fields.
  */
 import { I18nService } from '../common/i18n.js';
 import { STATUS_MAP, ContextAnalyzer } from './utils.js';
@@ -92,7 +94,6 @@ export class UIManager {
             }
         });
 
-        // HTML substituído com o Custom Dropdown em vez do <select> nativo
         panel.innerHTML = `
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 12px;">
@@ -106,7 +107,11 @@ export class UIManager {
                 </div>
 
                 <div id="malProgressWrap" class="mal-progress-container" style="display: none;">
-                    <span id="malProgressText" class="mal-progress-text"></span>
+                    <div class="mal-progress-input-group">
+                        <span id="malProgressPrefix" class="mal-progress-prefix"></span>
+                        <input type="number" id="malProgressInput" class="mal-progress-input" min="0">
+                        <span id="malProgressMax" class="mal-progress-max"></span>
+                    </div>
                     <div style="display: flex; gap: 6px;">
                         <button id="malQuickDecBtn" class="mal-mini-btn dec">-</button>
                         <button id="malQuickAddBtn" class="mal-mini-btn inc">+</button>
@@ -120,7 +125,6 @@ export class UIManager {
         const header = document.getElementById('malPanelTitle');
         DraggableService.init(panel, header, this.savePanelPosition);
 
-        // Lógica Global para fechar o Dropdown Premium ao clicar fora
         document.addEventListener('click', (e) => {
             const wrapper = document.getElementById('malStatusSelectWrapper');
             if (wrapper && !wrapper.contains(e.target)) {
@@ -143,7 +147,6 @@ export class UIManager {
         
         titleEl.innerText = itemName;
         
-        // Desativa o Custom Dropdown
         statusWrapper.classList.remove('open');
         statusLabel.innerText = I18nService.get('statusNotFoundMal', this.currentLanguage);
         statusOptions.innerHTML = '';
@@ -173,7 +176,11 @@ export class UIManager {
         
         const btn = document.getElementById('malOpenBtn');
         const progressWrap = document.getElementById('malProgressWrap');
-        const progressText = document.getElementById('malProgressText');
+        
+        // Progress UI Elements
+        const prefixEl = document.getElementById('malProgressPrefix');
+        const inputEl = document.getElementById('malProgressInput');
+        const maxEl = document.getElementById('malProgressMax');
         const quickAddBtn = document.getElementById('malQuickAddBtn');
         const quickDecBtn = document.getElementById('malQuickDecBtn');
         
@@ -182,14 +189,12 @@ export class UIManager {
         const mediaType = data?.type || ContextAnalyzer.guessContentType();
         const watchingLabel = mediaType === 'manga' ? 'statusReading' : 'statusWatching';
 
-        // Reativa o Custom Dropdown
         statusWrapper.style.opacity = '1';
         statusWrapper.style.pointerEvents = 'auto';
 
         const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
         const currentStatusStr = data?.status ? statusMap[data.status] : null;
 
-        // Popula as opções do Custom Dropdown
         statusOptions.innerHTML = `
             ${!data?.status ? `<div class="mal-option disabled">${I18nService.get('statusAddToList', this.currentLanguage)}</div>` : ''}
             <div class="mal-option ${currentStatusStr === 'watching' ? 'selected' : ''}" data-value="watching">${I18nService.get(watchingLabel, this.currentLanguage)}</div>
@@ -199,7 +204,6 @@ export class UIManager {
             <div class="mal-option ${currentStatusStr === 'plan_to_watch' ? 'selected' : ''}" data-value="plan_to_watch">${I18nService.get('statusPlanned', this.currentLanguage)}</div>
         `;
 
-        // Define a etiqueta inicial (se já estiver na lista, mostra o estado, se não, mostra "Adicionar à Lista")
         if (currentStatusStr) {
             const activeOption = statusOptions.querySelector(`.mal-option[data-value="${currentStatusStr}"]`);
             statusLabel.innerText = activeOption ? activeOption.innerText : I18nService.get('statusPlanned', this.currentLanguage);
@@ -207,19 +211,16 @@ export class UIManager {
             statusLabel.innerText = I18nService.get('statusAddToList', this.currentLanguage);
         }
 
-        // Lógica de Abrir/Fechar
         statusTrigger.onclick = () => {
             statusWrapper.classList.toggle('open');
         };
 
-        // Lógica ao Clicar numa Opção (Optimistic UI)
         statusOptions.querySelectorAll('.mal-option:not(.disabled)').forEach(opt => {
             opt.onclick = (e) => {
                 const newStatus = e.target.getAttribute('data-value');
                 statusLabel.innerText = e.target.innerText;
                 statusWrapper.classList.remove('open');
                 
-                // Feedback visual de carregamento no trigger
                 statusWrapper.style.opacity = '0.7';
                 statusWrapper.style.pointerEvents = 'none';
 
@@ -230,12 +231,10 @@ export class UIManager {
                     data: { status: newStatus }
                 }, (response) => {
                     if (response && response.success) {
-                        DataManager.invalidateCache();
-                        // Reinicia a UI para o estado correto
                         const statusId = Object.keys(statusMap).find(key => statusMap[key] === newStatus);
+                        DataManager.updateCacheItem(data.id, mediaType, { status: parseInt(statusId) });
                         this.showPanel(itemName, { ...data, status: parseInt(statusId) });
                     } else {
-                        // Rollback em caso de erro
                         statusWrapper.style.opacity = '1';
                         statusWrapper.style.pointerEvents = 'auto';
                     }
@@ -243,35 +242,52 @@ export class UIManager {
             };
         });
 
-        // Lógica de Progresso (+ / -)
         if (data && data.status) {
             if (data.progress === undefined) data.progress = 0;
             
-            const prefix = mediaType === 'manga' ? 'Ch' : 'Ep';
+            const prefixStr = mediaType === 'manga' ? 'Ch:' : 'Ep:';
             const field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
+            const maxVal = data.total > 0 ? data.total : null;
             
-            progressText.innerText = `${prefix}: ${data.progress}`;
+            prefixEl.innerText = prefixStr;
+            inputEl.value = data.progress;
+            
+            if (maxVal) {
+                maxEl.innerText = `/ ${maxVal}`;
+                inputEl.max = maxVal;
+            } else {
+                maxEl.innerText = "";
+                inputEl.removeAttribute('max');
+            }
+            
             progressWrap.style.display = 'flex';
             
             const updateProgressOptimistic = (newVal) => {
-                if (newVal < 0) return;
+                if (isNaN(newVal) || newVal < 0) newVal = 0;
+                if (maxVal && newVal > maxVal) newVal = maxVal; 
                 
                 const oldVal = data.progress;
+                if (oldVal === newVal) {
+                    inputEl.value = oldVal; 
+                    return;
+                }
+
                 data.progress = newVal;
-                progressText.innerText = `${prefix}: ${newVal}`;
+                inputEl.value = newVal;
                 
-                progressText.classList.remove('pop');
-                void progressText.offsetWidth; 
-                progressText.classList.add('pop');
+                inputEl.classList.remove('pop');
+                void inputEl.offsetWidth; 
+                inputEl.classList.add('pop');
                 progressWrap.classList.add('optimistic-success');
                 
                 setTimeout(() => {
-                    progressText.classList.remove('pop');
+                    inputEl.classList.remove('pop');
                     progressWrap.classList.remove('optimistic-success');
                 }, 300);
 
                 quickAddBtn.disabled = true;
                 quickDecBtn.disabled = true;
+                inputEl.disabled = true;
                 
                 chrome.runtime.sendMessage({
                     action: "UPDATE_PROGRESS",
@@ -281,18 +297,31 @@ export class UIManager {
                 }, (response) => {
                     quickAddBtn.disabled = false;
                     quickDecBtn.disabled = false;
+                    inputEl.disabled = false;
 
                     if (response && response.success) {
-                        DataManager.invalidateCache();
+                        DataManager.updateCacheItem(data.id, mediaType, { progress: newVal });
                     } else {
                         data.progress = oldVal;
-                        progressText.innerText = `${prefix}: ${oldVal}`;
+                        inputEl.value = oldVal;
                     }
                 });
             };
 
             quickAddBtn.onclick = () => updateProgressOptimistic(data.progress + 1);
             quickDecBtn.onclick = () => updateProgressOptimistic(data.progress - 1);
+
+            // Substituir listeners antigos para evitar duplicação em re-renders do painel
+            const newChangeHandler = (e) => updateProgressOptimistic(parseInt(e.target.value, 10));
+            const newKeyHandler = (e) => { if (e.key === 'Enter') inputEl.blur(); };
+            
+            // Clone and replace to clear old event listeners
+            const newInputEl = inputEl.cloneNode(true);
+            inputEl.parentNode.replaceChild(newInputEl, inputEl);
+            
+            newInputEl.addEventListener('change', newChangeHandler);
+            newInputEl.addEventListener('keypress', newKeyHandler);
+            
         } else {
             progressWrap.style.display = 'none';
         }
