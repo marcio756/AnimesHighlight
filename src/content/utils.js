@@ -35,18 +35,18 @@ export const STATUS_MAP = {
 
 export class ProgressExtractor {
     /**
-     * Tenta inferir o número do episódio/capítulo a partir de uma string (ex: URL ou Título)
-     * @param {string} text 
-     * @param {'anime'|'manga'} mediaType 
-     * @returns {number|null}
+     * Attempts to infer the episode or chapter number from a string (e.g., URL or Title).
+     * @param {string} text - The raw string to parse.
+     * @param {'anime'|'manga'} mediaType - The context of the search to apply the correct regex.
+     * @returns {number|null} The extracted progress number or null if not found.
      */
     static extract(text, mediaType) {
         if (!text) return null;
         const clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         
-        // Procura padrões explícitos como "ep 80", "episodio-80", "chapter 80", "cap_80", "e080"
-        const animeRegex = /\b(ep|episodio|episode|e)\s*[-_:]?\s*0*(\d+)\b/i;
-        const mangaRegex = /\b(cap|capitulo|chapter|ch|c)\s*[-_:]?\s*0*(\d+)\b/i;
+        // Primary explicit and long patterns (Removed isolated 'e' and 'c' to prevent false positives like 'anata-e-3')
+        const animeRegex = /\b(ep|episodio|episode)\s*[-_:]?\s*0*(\d+)\b/i;
+        const mangaRegex = /\b(cap|capitulo|chapter|ch)\s*[-_:]?\s*0*(\d+)\b/i;
         
         const regex = mediaType === 'manga' ? mangaRegex : animeRegex;
         const match = clean.match(regex);
@@ -54,8 +54,18 @@ export class ProgressExtractor {
         if (match && match[2]) {
             return parseInt(match[2], 10);
         }
+
+        // Fallback 1: Literal short patterns without separators (e.g., e21, c105)
+        const shortAnimeRegex = /\be0*(\d+)\b/i;
+        const shortMangaRegex = /\bc0*(\d+)\b/i;
+        const shortRegex = mediaType === 'manga' ? shortMangaRegex : shortAnimeRegex;
+        const shortMatch = clean.match(shortRegex);
+
+        if (shortMatch && shortMatch[1]) {
+            return parseInt(shortMatch[1], 10);
+        }
         
-        // Fallback para URLs que terminam diretamente no número exato: "one-piece-1099" ou "one-piece/1099"
+        // Fallback 2: URLs that end directly on the exact number (e.g., "one-piece-1099" or "one-piece/1099")
         const endNumMatch = clean.match(/(?:-|\/)\s*0*(\d+)\/?$/);
         if (endNumMatch && endNumMatch[1]) {
             return parseInt(endNumMatch[1], 10);
@@ -66,12 +76,20 @@ export class ProgressExtractor {
 }
 
 export class DynamicDebouncer {
+    /**
+     * Initializes the dynamic debouncer.
+     * @param {Function} callback - The function to execute.
+     */
     constructor(callback) {
         this.callback = callback;
         this.timer = null;
         this.currentDelay = CONFIG.MIN_DEBOUNCE_DELAY;
     }
 
+    /**
+     * Triggers the debounced callback, adjusting the delay based on execution performance.
+     * @param {...any} args - Arguments to pass to the callback.
+     */
     trigger(...args) {
         if (this.timer) clearTimeout(this.timer);
         
@@ -92,6 +110,10 @@ export class DynamicDebouncer {
 }
 
 export class PerformanceGuard {
+    /**
+     * Evaluates if the current page context justifies running the extension logic.
+     * @returns {boolean} True if the page contains media-related keywords.
+     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -109,6 +131,10 @@ export class PerformanceGuard {
 }
 
 export class ContextAnalyzer {
+    /**
+     * Guesses whether the current page relates to anime or manga based on URL and text density.
+     * @returns {'anime'|'manga'}
+     */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
         
@@ -155,6 +181,10 @@ export class ContextAnalyzer {
         return (pageMangaScore > pageAnimeScore) ? 'manga' : 'anime';
     }
 
+    /**
+     * Determines if the current page is a directory or listing page.
+     * @returns {boolean}
+     */
     static isListingPage() {
         const pathName = window.location.pathname.toLowerCase();
         const segments = pathName.split('/').filter(p => p.length > 0);
@@ -174,13 +204,19 @@ export class ContextAnalyzer {
 }
 
 export class TextNormalizer {
+    /**
+     * Strips special characters and redundant words from a title string to establish a search baseline.
+     * @param {string} str - Raw title string.
+     * @returns {string} Cleaned title.
+     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
         let clean = String(str).toLowerCase();
         clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
         
-        clean = clean.replace(/\b(episodio|episode|ep|e|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
+        // Removed isolated 'e' to avoid truncating titles like 'Fumetsu no Anata e'
+        clean = clean.replace(/\b(episodio|episode|ep|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
         clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1"); 
         clean = clean.replace(/\s+-\s+/g, " "); 
         clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
@@ -194,6 +230,10 @@ export class TextNormalizer {
         return clean.trim();
     }
 
+    /**
+     * Extracts a probable media title from the current URL path.
+     * @returns {string|null} The raw slug.
+     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
@@ -217,6 +257,12 @@ export class TextNormalizer {
 }
 
 export class Matcher {
+    /**
+     * Determines if a site title conceptually matches a MyAnimeList title.
+     * @param {string} siteTitle - The normalized title found on the website.
+     * @param {string} malTitle - The normalized title from the user's list.
+     * @returns {boolean}
+     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 
