@@ -1,10 +1,5 @@
 // src/content/data.js
 
-/**
- * Data Storage and API Communication Layer
- * @description Isolates caching logic. 
- * Prevents domain-leakage by transitioning from generic localStorage to chrome.storage.local.
- */
 import { TextNormalizer, CONFIG } from './utils.js';
 
 export class SynonymDictionary {
@@ -12,8 +7,13 @@ export class SynonymDictionary {
 
     static async init() {
         return new Promise((resolve) => {
-            chrome.storage.local.get(['mal_synonyms_cache'], (res) => {
-                this.cache = res.mal_synonyms_cache || {};
+            chrome.storage.local.get(['mal_synonyms_cache', 'synonym_version'], (res) => {
+                if (res.synonym_version !== 3) {
+                    this.cache = {};
+                    chrome.storage.local.set({ mal_synonyms_cache: {}, synonym_version: 3 });
+                } else {
+                    this.cache = res.mal_synonyms_cache || {};
+                }
                 resolve();
             });
         });
@@ -43,17 +43,10 @@ export class DataManager {
         });
     }
 
-    /**
-     * Clears the active cache from extension storage.
-     */
     static invalidateCache() {
         chrome.storage.local.remove([CONFIG.CACHE_KEY]);
     }
 
-    /**
-     * NOVA FUNÇÃO: Atualiza a cache local diretamente sem forçar um novo fetch do MAL.
-     * Resolve o problema da latência da API pública do MyAnimeList que demora a refletir atualizações.
-     */
     static async updateCacheItem(id, type, newData) {
         return new Promise((resolve) => {
             chrome.storage.local.get([CONFIG.CACHE_KEY], (res) => {
@@ -81,9 +74,6 @@ export class DataManager {
         });
     }
 
-    /**
-     * Fetches user list with built-in cache validation across all websites.
-     */
     static async getUserList() {
         const USERNAME = await this.getUsername();
 
@@ -117,13 +107,13 @@ export class DataManager {
                                 id: item.id,
                                 score: item.score,
                                 rawTitle: item.title,
+                                title_eng: item.title_eng || null,
                                 type: item.type,
                                 progress: item.progress,
                                 total: item.total
                             });
                         });
                         
-                        // Saves standardized cache globally
                         chrome.storage.local.set({
                             [CONFIG.CACHE_KEY]: JSON.stringify({
                                 timestamp: Date.now(),

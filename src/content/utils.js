@@ -33,63 +33,52 @@ export const STATUS_MAP = {
     6: { class: 'mal-plan', labelKey: 'statusPlanned', color: '#787878' }
 };
 
+export class SWLogger {
+    static log(message, data = null) {
+        try {
+            chrome.runtime.sendMessage({ 
+                action: "SW_LOG", 
+                message: `[MAL Highlighter Debug] ${message}`, 
+                data: data 
+            });
+        } catch(e) {}
+    }
+}
+
 export class ProgressExtractor {
-    /**
-     * Attempts to infer the episode or chapter number from a string (e.g., URL or Title).
-     * @param {string} text - The raw string to parse.
-     * @param {'anime'|'manga'} mediaType - The context of the search to apply the correct regex.
-     * @returns {number|null} The extracted progress number or null if not found.
-     */
     static extract(text, mediaType) {
         if (!text) return null;
         const clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         
-        // Primary explicit and long patterns (Removed isolated 'e' and 'c' to prevent false positives like 'anata-e-3')
         const animeRegex = /\b(ep|episodio|episode)\s*[-_:]?\s*0*(\d+)\b/i;
         const mangaRegex = /\b(cap|capitulo|chapter|ch)\s*[-_:]?\s*0*(\d+)\b/i;
         
         const regex = mediaType === 'manga' ? mangaRegex : animeRegex;
         const match = clean.match(regex);
         
-        if (match && match[2]) {
-            return parseInt(match[2], 10);
-        }
+        if (match && match[2]) return parseInt(match[2], 10);
 
-        // Fallback 1: Literal short patterns without separators (e.g., e21, c105)
         const shortAnimeRegex = /\be0*(\d+)\b/i;
         const shortMangaRegex = /\bc0*(\d+)\b/i;
         const shortRegex = mediaType === 'manga' ? shortMangaRegex : shortAnimeRegex;
         const shortMatch = clean.match(shortRegex);
 
-        if (shortMatch && shortMatch[1]) {
-            return parseInt(shortMatch[1], 10);
-        }
+        if (shortMatch && shortMatch[1]) return parseInt(shortMatch[1], 10);
         
-        // Fallback 2: URLs that end directly on the exact number (e.g., "one-piece-1099" or "one-piece/1099")
         const endNumMatch = clean.match(/(?:-|\/)\s*0*(\d+)\/?$/);
-        if (endNumMatch && endNumMatch[1]) {
-            return parseInt(endNumMatch[1], 10);
-        }
+        if (endNumMatch && endNumMatch[1]) return parseInt(endNumMatch[1], 10);
         
         return null;
     }
 }
 
 export class DynamicDebouncer {
-    /**
-     * Initializes the dynamic debouncer.
-     * @param {Function} callback - The function to execute.
-     */
     constructor(callback) {
         this.callback = callback;
         this.timer = null;
         this.currentDelay = CONFIG.MIN_DEBOUNCE_DELAY;
     }
 
-    /**
-     * Triggers the debounced callback, adjusting the delay based on execution performance.
-     * @param {...any} args - Arguments to pass to the callback.
-     */
     trigger(...args) {
         if (this.timer) clearTimeout(this.timer);
         
@@ -110,10 +99,6 @@ export class DynamicDebouncer {
 }
 
 export class PerformanceGuard {
-    /**
-     * Evaluates if the current page context justifies running the extension logic.
-     * @returns {boolean} True if the page contains media-related keywords.
-     */
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
         if (url.includes('myanimelist')) return false; 
@@ -131,24 +116,14 @@ export class PerformanceGuard {
 }
 
 export class ContextAnalyzer {
-    /**
-     * Guesses whether the current page relates to anime or manga based on URL and text density.
-     * @returns {'anime'|'manga'}
-     */
     static guessContentType() {
         const url = window.location.href.toLowerCase();
-        
         const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon', 'ler', 'capitulo'];
         const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'assistir', 'season', 'ova'];
-        
         const urlTokens = url.replace(/[^a-z0-9]/g, ' ').split(' ');
         
-        for (let kw of urlMangaKw) {
-            if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'manga';
-        }
-        for (let kw of urlAnimeKw) {
-            if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'anime';
-        }
+        for (let kw of urlMangaKw) if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'manga';
+        for (let kw of urlAnimeKw) if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'anime';
 
         const path = window.location.pathname;
         const isHomePage = path === '/' || path.length < 3;
@@ -172,7 +147,6 @@ export class ContextAnalyzer {
             if (title.includes(kw)) pageMangaScore += 10;
             if (metaDesc.includes(kw)) pageMangaScore += 10;
         });
-        
         urlAnimeKw.forEach(kw => {
             if (title.includes(kw)) pageAnimeScore += 10;
             if (metaDesc.includes(kw)) pageAnimeScore += 10;
@@ -181,20 +155,12 @@ export class ContextAnalyzer {
         return (pageMangaScore > pageAnimeScore) ? 'manga' : 'anime';
     }
 
-    /**
-     * Determines if the current page is a directory or listing page.
-     * @returns {boolean}
-     */
     static isListingPage() {
         const pathName = window.location.pathname.toLowerCase();
         const segments = pathName.split('/').filter(p => p.length > 0);
-        
         if (segments.length === 0) return true; 
         
-        const genericDirectories = [
-            'episodios', 'episodio', 'lancamentos', 'animes', 'anime',
-            'mangas', 'manga', 'filmes', 'ovas', 'calendario', 'lista', 'search', 'explorar', 'genre', 'categoria'
-        ];
+        const genericDirectories = ['episodios', 'episodio', 'lancamentos', 'animes', 'anime', 'mangas', 'manga', 'filmes', 'ovas', 'calendario', 'lista', 'search', 'explorar', 'genre', 'categoria'];
 
         if (segments.length === 1 && genericDirectories.includes(segments[0])) return true;
         if (segments.length === 2 && genericDirectories.includes(segments[0]) && ['lista', 'popular', 'news', 'recentes', 'search'].includes(segments[1])) return true;
@@ -204,36 +170,37 @@ export class ContextAnalyzer {
 }
 
 export class TextNormalizer {
-    /**
-     * Strips special characters and redundant words from a title string to establish a search baseline.
-     * @param {string} str - Raw title string.
-     * @returns {string} Cleaned title.
-     */
     static normalize(str) {
         if (!str || str.length < 3) return "";
         
         let clean = String(str).toLowerCase();
         clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
         
-        // Removed isolated 'e' to avoid truncating titles like 'Fumetsu no Anata e'
         clean = clean.replace(/\b(episodio|episode|ep|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
-        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th)\b/g, "$1"); 
+        
+        clean = clean.replace(/\bii\b/g, "2");
+        clean = clean.replace(/\biii\b/g, "3");
+        clean = clean.replace(/\biv\b/g, "4");
+        clean = clean.replace(/\bv\b/g, "5");
+        clean = clean.replace(/\bvi\b/g, "6");
+
+        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|part|parte)\b/g, " s$1 ");
+        clean = clean.replace(/\b(season|temporada|temp|part|parte)\s*([0-9]+)\b/g, " s$2 ");
+        
         clean = clean.replace(/\s+-\s+/g, " "); 
         clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
         
-        const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|manga|mangas|manhwa|[0-9]+ª|online|ver|assistir|ler|season|temp|parte|part|net|com|br|org|hd|fhd|4k|q1n)\b/g;
+        const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|manga|mangas|manhwa|online|ver|assistir|ler|net|com|br|org|hd|fhd|4k|q1n)\b/g;
         clean = clean.replace(ignoreRegex, " ");
 
         clean = clean.replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
         if (clean.endsWith('-')) clean = clean.slice(0, -1);
         
+        clean = clean.replace(/\b([2-9]|1[0-5])\b$/, "s$1");
+        
         return clean.trim();
     }
 
-    /**
-     * Extracts a probable media title from the current URL path.
-     * @returns {string|null} The raw slug.
-     */
     static getSlugFromUrl() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(p => p.length > 0);
@@ -243,7 +210,6 @@ export class TextNormalizer {
 
         for (let i = segments.length - 1; i >= 0; i--) {
             const seg = segments[i].toLowerCase();
-            
             if (generics.includes(seg)) continue;
             if (/^\d+$/.test(seg)) continue; 
             if (/^(capitulo|capítulo|cap|chapter|ch|episodio|episódio|ep|episode)[\s\-]?\d+/i.test(seg)) continue;
@@ -251,20 +217,45 @@ export class TextNormalizer {
 
             return seg.replace(/[\-_]/g, ' ').trim();
         }
-
         return null;
     }
 }
 
 export class Matcher {
-    /**
-     * Determines if a site title conceptually matches a MyAnimeList title.
-     * @param {string} siteTitle - The normalized title found on the website.
-     * @param {string} malTitle - The normalized title from the user's list.
-     * @returns {boolean}
-     */
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
+
+        const getSeasonNums = (t) => {
+            const explicit = (t.match(/\bs(\d+)\b/g) || []).map(m => m.replace('s', ''));
+            const implicit = (t.match(/\b([2-9]|1[0-5])\b/g) || []);
+            return [...new Set([...explicit, ...implicit])];
+        };
+        
+        const sNumsSite = getSeasonNums(siteTitle);
+        const sNumsMal = getSeasonNums(malTitle);
+
+        const baseSite = siteTitle.replace(/\bs\d+\b/g, '').replace(/\b\d+\b/g, '').replace(/\s+/g, ' ').trim();
+        const baseMal = malTitle.replace(/\bs\d+\b/g, '').replace(/\b\d+\b/g, '').replace(/\s+/g, ' ').trim();
+
+        const baseMatch = baseSite === baseMal || 
+                          (baseMal.length > 4 && baseSite.includes(baseMal)) || 
+                          (baseSite.length > 4 && baseMal.includes(baseSite));
+
+        if (baseMatch) {
+            if (sNumsSite.length > 0 && sNumsMal.length > 0) {
+                const intersection = sNumsSite.filter(n => sNumsMal.includes(n));
+                if (intersection.length === 0) {
+                    SWLogger.log("Match Rejeitado: Temporadas incompativeis", {site: siteTitle, mal: malTitle, siteNums: sNumsSite, malNums: sNumsMal});
+                    return false; 
+                }
+            } else if (sNumsSite.length > 0 && sNumsMal.length === 0) {
+                SWLogger.log(`Match Rejeitado: O Site tem temporada (${sNumsSite[0]}), mas MAL é T1`, {site: siteTitle, mal: malTitle});
+                return false;
+            } else if (sNumsSite.length === 0 && sNumsMal.length > 0) {
+                SWLogger.log(`Match Rejeitado: O Site é T1, mas MAL é temporada (${sNumsMal[0]})`, {site: siteTitle, mal: malTitle});
+                return false;
+            }
+        }
 
         if (malTitle.includes(siteTitle) || siteTitle.includes(malTitle)) {
             if (Math.abs(malTitle.length - siteTitle.length) <= 4) return true;
@@ -272,8 +263,8 @@ export class Matcher {
         }
 
         const cleanToken = t => t.replace(/-/g, '');
-        const tokensSite = siteTitle.split(' ').filter(t => t.length > 1).map(cleanToken);
-        const tokensMal = malTitle.split(' ').filter(t => t.length > 1).map(cleanToken);
+        const tokensSite = siteTitle.split(' ').filter(t => t.length > 1 || !isNaN(t.replace('s',''))).map(cleanToken);
+        const tokensMal = malTitle.split(' ').filter(t => t.length > 1 || !isNaN(t.replace('s',''))).map(cleanToken);
         
         if (tokensSite.length === 0 || tokensMal.length === 0) return false;
 

@@ -16,6 +16,16 @@ chrome.storage.local.get(['lastMonitorCheck'], (res) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    
+    // NOVO: Interceção das mensagens de log e impressão no Service Worker
+    if (request.action === "SW_LOG") {
+        console.group(request.message);
+        if (request.data) console.log(JSON.stringify(request.data, null, 2));
+        console.groupEnd();
+        sendResponse({ success: true });
+        return true;
+    }
+
     if (request.action === "FETCH_MAL_LIST") {
         MalService.fetchAllUserItems(request.username)
             .then(data => sendResponse({ success: true, data: data }))

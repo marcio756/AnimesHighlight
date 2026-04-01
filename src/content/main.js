@@ -1,6 +1,6 @@
 // src/content/main.js
 
-import { PerformanceGuard, ContextAnalyzer, TextNormalizer, Matcher, DynamicDebouncer, UI_BLOCKLIST, ProgressExtractor } from './utils.js';
+import { PerformanceGuard, ContextAnalyzer, TextNormalizer, Matcher, DynamicDebouncer, UI_BLOCKLIST, ProgressExtractor, SWLogger } from './utils.js';
 import { SynonymDictionary, DataManager } from './data.js';
 import { UIManager } from './ui.js';
 
@@ -84,6 +84,18 @@ class MalController {
                 for (const apiItem of response.results) {
                     if (apiItem.type !== currentMediaType) continue;
 
+                    const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
+                    const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
+                    const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
+                        ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn)))
+                        : false;
+                    
+                    const isMatch = Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
+                                    (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) ||
+                                    hasSynonymMatch;
+                    
+                    if (!isMatch) continue;
+
                     for (let [localTitle, localDataArray] of this.globalMediaMap.entries()) {
                         const foundInList = localDataArray.find(v => v.id === apiItem.mal_id && v.type === currentMediaType);
                         
@@ -109,9 +121,13 @@ class MalController {
                         
                         const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
                         const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
+                        const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
+                            ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn)))
+                            : false;
                         
                         if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
-                           (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm))) {
+                           (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) ||
+                           hasSynonymMatch) {
                             bestMatch = apiItem;
                             finalType = apiItem.type;
                             break;
@@ -190,7 +206,7 @@ class MalController {
         if (element.closest('[data-mal-status]')) return;
         if (element.offsetParent === null) return; 
         
-        const text = element.innerText || "";
+        let text = element.getAttribute('title') || element.getAttribute('aria-label') || element.innerText || "";
         if (text.length < 3) return;
         
         const lowerText = text.toLowerCase();
@@ -201,6 +217,10 @@ class MalController {
 
         const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
 
+        if (itemTitle.includes("dorohedoro") || itemTitle.includes("jidou") || itemTitle.includes("youkoso")) {
+            SWLogger.log(`Extraído do HTML: "${text}" | Limpo/Resolvido para: "${itemTitle}"`);
+        }
+
         let matchArray = null;
         if (this.globalMediaMap.has(itemTitle)) {
             matchArray = this.globalMediaMap.get(itemTitle);
@@ -208,6 +228,15 @@ class MalController {
             if (itemTitle.length < 150) {
                 for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
                     if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
+                        matchArray = dataArray;
+                        break;
+                    }
+                    
+                    const hasAlternativeMatch = dataArray.some(node => {
+                        return node.title_eng && Matcher.isFuzzyMatch(itemTitle, TextNormalizer.normalize(node.title_eng));
+                    });
+                    
+                    if (hasAlternativeMatch) {
                         matchArray = dataArray;
                         break;
                     }
@@ -238,7 +267,7 @@ class MalController {
             
             if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
                 if (match) {
-                    this.attemptAutoUpdate(match, currentMediaType); // BUG FIX: Atualizar ao detetar o elemento na página
+                    this.attemptAutoUpdate(match, currentMediaType); 
                     if (!document.getElementById('malControlPanel')?.classList.contains('visible')) {
                         UIManager.showPanel(match.rawTitle || text, match);
                     }
@@ -294,6 +323,15 @@ class MalController {
         if (!matchArray) {
             for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
                 if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
+                    matchArray = dataArray;
+                    break;
+                }
+                
+                const hasAlternativeMatch = dataArray.some(node => {
+                    return node.title_eng && Matcher.isFuzzyMatch(resolvedUrlTitle, TextNormalizer.normalize(node.title_eng));
+                });
+                
+                if (hasAlternativeMatch) {
                     matchArray = dataArray;
                     break;
                 }
