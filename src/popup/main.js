@@ -1,9 +1,13 @@
+// src/popup/main.js
+
 /**
  * Main Controller for Popup
- * @description Orchestrates user settings, storage, I18n translations, and logic integration.
+ * @description Orchestrates user settings, storage, I18n translations, and logic integration using Services.
  */
 import { I18nService } from '../common/i18n.js';
 import { PopupUI, ProgressService } from './ui.js';
+import { StorageService } from './services/storage.service.js';
+import { ApiService } from './services/api.service.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     chrome.action.setBadgeText({ text: "" });
@@ -16,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = document.querySelectorAll('.tab-pane');
     
+    // Elementos do Perfil
     const inputUser = document.getElementById('username');
     const saveProfileBtn = document.getElementById('saveBtn');
     const statusProfile = document.getElementById('statusProfile');
@@ -24,25 +29,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     const avatar = document.getElementById('avatar');
     const welcomeText = document.getElementById('welcomeText');
 
+    // Elementos do Monitor
     const inputNewSiteUrl = document.getElementById('newSiteUrl');
     const addSiteBtn = document.getElementById('addSiteBtn');
     const monitoredSitesList = document.getElementById('monitoredSitesList');
     const emptySitesState = document.getElementById('emptySitesState');
     const statusMonitor = document.getElementById('statusMonitor');
 
+    // Elementos do Histórico
     const notifListEl = document.getElementById('notificationList');
     const emptyStateEl = document.getElementById('emptyState');
     const clearNotifsBtn = document.getElementById('clearNotifsBtn');
-
-    // =======================================================
-    // ELEMENTOS DO CUSTOM DROPDOWN (HISTÓRICO)
-    // =======================================================
     const historyFilterWrapper = document.getElementById('historyFilterWrapper');
     const historyFilterTrigger = document.getElementById('historyFilterTrigger');
     const historyFilterLabel = document.getElementById('historyFilterLabel');
     const historyFilterOptions = document.getElementById('historyFilterOptions');
     let currentFilterValue = 'all'; 
 
+    // Elementos de Definições
     const langSelect = document.getElementById('langSelect');
     const checkPanelEnabled = document.getElementById('panelEnabled');
     const checkPanelTrans = document.getElementById('panelTransparent');
@@ -51,7 +55,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const hlStatusCheckboxes = document.querySelectorAll('.hl-status');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
-
     const syncStatusText = document.getElementById('syncStatusText');
     const syncActionBtn = document.getElementById('syncActionBtn');
     const syncWarningBox = document.getElementById('syncWarningBox');
@@ -65,7 +68,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let globalSites = [];
     let globalLogs = [];
 
-    // Ícones Premium em SVG
+    // --- Configuração de UI e Eventos Iniciais ---
+
     const iconSun = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
     const iconMoon = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
 
@@ -80,17 +84,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const newTheme = isDark ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', newTheme);
         updateThemeIcon();
-        chrome.storage.local.set({ theme: newTheme });
+        StorageService.saveSettings({ theme: newTheme });
     });
 
-    historyFilterTrigger.addEventListener('click', () => {
-        historyFilterWrapper.classList.toggle('open');
-    });
-
+    historyFilterTrigger.addEventListener('click', () => historyFilterWrapper.classList.toggle('open'));
     document.addEventListener('click', (e) => {
-        if (historyFilterWrapper && !historyFilterWrapper.contains(e.target)) {
-            historyFilterWrapper.classList.remove('open');
-        }
+        if (historyFilterWrapper && !historyFilterWrapper.contains(e.target)) historyFilterWrapper.classList.remove('open');
     });
 
     const updateFilter = () => {
@@ -111,12 +110,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     hlStatusCheckboxes.forEach(cb => cb.addEventListener('change', syncColorVisibility));
 
-    const saveSitesState = (triggerAlarmRefresh = true) => {
-        chrome.storage.local.set({ monitoredSites: globalSites }, () => {
-            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            updateFilter(); 
-            if (triggerAlarmRefresh) chrome.runtime.sendMessage({ action: "UPDATE_MONITORING" });
-        });
+    // --- Lógica de Estado (State Management) ---
+
+    const saveSitesState = async (triggerAlarmRefresh = true) => {
+        await StorageService.saveSites(globalSites);
+        PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+        updateFilter(); 
+        if (triggerAlarmRefresh) ApiService.triggerMonitorUpdate();
     };
 
     const siteActionCallbacks = {
@@ -131,26 +131,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     const renderLogs = () => {
-        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, currentFilterValue, currentLang, (updatedLogs) => {
+        PopupUI.renderNotifications(globalLogs, notifListEl, emptyStateEl, clearNotifsBtn, currentFilterValue, currentLang, async (updatedLogs) => {
             globalLogs = updatedLogs;
-            chrome.storage.local.set({ notificationLog: globalLogs }, () => renderLogs());
+            await StorageService.saveLogs(globalLogs);
+            renderLogs();
         });
     };
 
-    const loadCoreData = () => {
-        chrome.storage.local.get(['notificationLog', 'monitoredSites'], (result) => {
-            globalSites = result.monitoredSites || [];
-            globalLogs = result.notificationLog || [];
-            
-            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            updateFilter(); 
-            renderLogs();
-            PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
-        });
+    const loadCoreData = async () => {
+        const data = await StorageService.getCoreData();
+        globalSites = data.sites;
+        globalLogs = data.logs;
+        
+        PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+        updateFilter(); 
+        renderLogs();
+        PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
     };
+
+    // --- Inicialização ---
 
     PopupUI.initTabs(tabs, panes, loadCoreData, loadCoreData);
     PopupUI.initSettingsAccordions(); 
+
+    const applySettingsToUI = (res) => {
+        if (res.malUsername) {
+            inputUser.value = res.malUsername;
+            if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
+        }
+        if (res.extensionLang) langSelect.value = res.extensionLang;
+        if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
+        if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
+        if (res.savePanelPos !== undefined) checkSavePanelPos.checked = res.savePanelPos;
+        if (res.autoUpdateProgress !== undefined) checkAutoUpdate.checked = res.autoUpdateProgress;
+        
+        if (res.highlightStatuses) hlStatusCheckboxes.forEach(cb => cb.checked = res.highlightStatuses.includes(parseInt(cb.value)));
+        if (res.customColors) {
+            Object.keys(colorPickers).forEach(id => {
+                if (res.customColors[id]) colorPickers[id].value = res.customColors[id];
+            });
+        }
+        syncColorVisibility();
+    };
+
+    StorageService.getSettings().then(res => {
+        applySettingsToUI(res);
+        loadCoreData();
+    });
+
+    // --- Sincronização Cloud ---
 
     const updateSyncUI = (isLoggedIn, email) => {
         if (isLoggedIn) {
@@ -175,71 +204,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     chrome.runtime.sendMessage({ action: "GET_SYNC_STATUS" }, (res) => {
-        if (res && res.loggedIn) updateSyncUI(true, res.email);
-        else updateSyncUI(false);
+        updateSyncUI(res && res.loggedIn, res?.email);
     });
 
     syncActionBtn.addEventListener('click', () => {
         ProgressService.start();
-        if (syncActionBtn.getAttribute('data-i18n') === 'btnLogout') {
-            syncActionBtn.innerText = "...";
-            chrome.runtime.sendMessage({ action: "SYNC_LOGOUT" }, (res) => {
-                updateSyncUI(false);
-                ProgressService.stop();
-            });
-        } else {
-            syncActionBtn.innerText = "...";
-            chrome.runtime.sendMessage({ action: "SYNC_LOGIN" }, (res) => {
-                if (res && res.success) {
-                    updateSyncUI(true, res.email);
-                } else {
-                    updateSyncUI(false);
-                }
-                ProgressService.stop();
-            });
-        }
+        const action = syncActionBtn.getAttribute('data-i18n') === 'btnLogout' ? "SYNC_LOGOUT" : "SYNC_LOGIN";
+        syncActionBtn.innerText = "...";
+        
+        chrome.runtime.sendMessage({ action }, (res) => {
+            updateSyncUI(res && res.success && action === "SYNC_LOGIN", res?.email);
+            ProgressService.stop();
+        });
     });
 
-    chrome.storage.local.get([
-        'malUsername', 'malAvatar', 'extensionLang', 
-        'panelEnabled', 'panelTransparent', 'savePanelPos', 'autoUpdateProgress', 'highlightStatuses', 'customColors'
-    ], (res) => {
-        if (res.malUsername) {
-            inputUser.value = res.malUsername;
-            if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
-        }
-        if (res.extensionLang) langSelect.value = res.extensionLang;
-        if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
-        if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
-        if (res.savePanelPos !== undefined) checkSavePanelPos.checked = res.savePanelPos;
-        if (res.autoUpdateProgress !== undefined) checkAutoUpdate.checked = res.autoUpdateProgress;
-        
-        if (res.highlightStatuses) {
-            hlStatusCheckboxes.forEach(cb => cb.checked = res.highlightStatuses.includes(parseInt(cb.value)));
-        }
-        if (res.customColors) {
-            Object.keys(colorPickers).forEach(id => {
-                if (res.customColors[id]) colorPickers[id].value = res.customColors[id];
-            });
-        }
-        syncColorVisibility();
-        loadCoreData(); 
-    });
+    // --- Manipulação de Eventos de Ação (Clicks e Submits) ---
 
     addSiteBtn.addEventListener('click', () => {
         const urlRaw = inputNewSiteUrl.value.trim();
         if (!urlRaw) return;
 
-        let formattedUrl;
         try {
             const urlObj = new URL(urlRaw.startsWith('http') ? urlRaw : `https://${urlRaw}`);
-            formattedUrl = urlObj.href;
-            const siteName = urlObj.hostname.replace('www.', '');
-
+            const formattedUrl = urlObj.href;
+            
             if (globalSites.some(s => s.url === formattedUrl)) {
-                // INTEGRAÇÃO DE TRADUÇÃO AQUI
-                PopupUI.updateStatus(statusMonitor, I18nService.get('siteExists', currentLang), "error");
-                return;
+                return PopupUI.updateStatus(statusMonitor, I18nService.get('siteExists', currentLang), "error");
             }
 
             globalSites.push({ id: 'temp', isSkeleton: true });
@@ -251,12 +241,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 globalSites.push({
                     id: Date.now().toString(),
                     url: formattedUrl,
-                    name: siteName,
+                    name: urlObj.hostname.replace('www.', ''),
                     enabled: true
                 });
                 saveSitesState();
             }, 400);
-
         } catch (e) {
             PopupUI.updateStatus(statusMonitor, I18nService.get('statusErrorUrl', currentLang), "error");
         }
@@ -264,12 +253,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     inputNewSiteUrl.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn.click(); });
 
-    saveSettingsBtn.addEventListener('click', () => {
-        const selectedLang = langSelect.value;
-        const pEnabled = checkPanelEnabled.checked;
-        const pTrans = checkPanelTrans.checked;
-        const sPos = checkSavePanelPos.checked;
-        const aUpdate = checkAutoUpdate.checked;
+    saveSettingsBtn.addEventListener('click', async () => {
+        saveSettingsBtn.innerText = "...";
+        saveSettingsBtn.disabled = true;
 
         const activeHighlights = Array.from(hlStatusCheckboxes).filter(cb => cb.checked).map(cb => parseInt(cb.value));
         const activeColors = {
@@ -277,27 +263,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             3: colorPickers[3].value, 4: colorPickers[4].value, 6: colorPickers[6].value
         };
 
-        saveSettingsBtn.innerText = "...";
-        saveSettingsBtn.disabled = true;
+        const settings = {
+            extensionLang: langSelect.value, 
+            panelEnabled: checkPanelEnabled.checked, 
+            panelTransparent: checkPanelTrans.checked,
+            savePanelPos: checkSavePanelPos.checked, 
+            autoUpdateProgress: checkAutoUpdate.checked, 
+            highlightStatuses: activeHighlights, 
+            customColors: activeColors
+        };
 
-        chrome.storage.local.set({ 
-            extensionLang: selectedLang, panelEnabled: pEnabled, panelTransparent: pTrans,
-            savePanelPos: sPos, autoUpdateProgress: aUpdate, highlightStatuses: activeHighlights, customColors: activeColors
-        }, () => {
-            currentLang = selectedLang;
-            I18nService.translateDOM(currentLang); 
-            updateFilter(); 
-            PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
-            
-            saveSettingsBtn.innerText = I18nService.get('btnSaveSettings', currentLang);
-            saveSettingsBtn.disabled = false;
-        });
+        await StorageService.saveSettings(settings);
+        
+        currentLang = langSelect.value;
+        I18nService.translateDOM(currentLang); 
+        updateFilter(); 
+        
+        PopupUI.updateStatus(statusSettings, I18nService.get('statusSaved', currentLang), "success");
+        saveSettingsBtn.innerText = I18nService.get('btnSaveSettings', currentLang);
+        saveSettingsBtn.disabled = false;
     });
 
-    clearNotifsBtn.addEventListener('click', () => {
+    clearNotifsBtn.addEventListener('click', async () => {
         if(confirm(I18nService.get('confirmClear', currentLang))) {
             globalLogs = [];
-            chrome.storage.local.set({ notificationLog: [] }, () => renderLogs());
+            await StorageService.clearLogs();
+            renderLogs();
         }
     });
 
@@ -308,31 +299,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         PopupUI.updateStatus(statusProfile, I18nService.get('statusChecking', currentLang), "");
         saveProfileBtn.disabled = true;
         profileArea.style.display = 'none';
-        
         profileSkeleton.style.display = 'flex';
         ProgressService.start();
 
         try {
-            const response = await fetch(`https://api.jikan.moe/v4/users/${username}`);
-            if (!response.ok) throw new Error('User not found');
-            const data = await response.json();
-            const imageUrl = data.data.images.jpg.image_url;
+            const imageUrl = await ApiService.verifyMalUser(username);
+            const malResponse = await ApiService.syncMalList(username);
 
-            chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: username }, (malResponse) => {
-                ProgressService.stop();
-                if (malResponse && malResponse.success) {
-                    chrome.storage.local.set({ malUsername: username, malAvatar: imageUrl }, () => {
-                        PopupUI.updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
-                        PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
-                        saveProfileBtn.disabled = false;
-                        localStorage.removeItem('mal_v35_full_list'); 
-                    });
-                } else {
-                    profileSkeleton.style.display = 'none';
-                    PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
-                    saveProfileBtn.disabled = false;
-                }
-            });
+            ProgressService.stop();
+            if (malResponse && malResponse.success) {
+                await StorageService.saveUserProfile(username, imageUrl);
+                PopupUI.updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
+                PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
+                saveProfileBtn.disabled = false;
+                localStorage.removeItem('mal_v35_full_list'); 
+            } else {
+                throw new Error('Falha ao sincronizar lista');
+            }
         } catch (error) {
             ProgressService.stop();
             profileSkeleton.style.display = 'none';

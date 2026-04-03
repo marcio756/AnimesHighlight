@@ -3,8 +3,8 @@
  * @description Manages alarms, multi-site background scraping, and notification generation using synonym dictionaries.
  */
 
-import { I18nService } from '../common/i18n.js';
-import { MalService } from './api.js';
+import { I18nService } from '../../common/i18n.js';
+import { MalService } from './api.service.js';
 
 export const MONITOR_CONFIG = {
     ALARM_NAME: "MAL_MONITOR_CHECK",
@@ -70,6 +70,11 @@ export class ReleaseMonitorService {
                         this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress); 
                         stateChanged = true;
                         continue;
+                    }
+
+                    // Previne que o monitor continue a procurar episódios que ultrapassam o limite da temporada base
+                    if (item.total > 0 && nextProgress > item.total) {
+                        continue; 
                     }
 
                     const normTarget = item.title.toLowerCase();
@@ -166,9 +171,6 @@ export class ReleaseMonitorService {
             
             if (!pattern.test(fullyCleanedText)) return null;
 
-            console.group(`[MAL Highlighter Debug] Lançamento confirmado no HTML: ${title} (Ep/Cap ${progressNumber})`);
-            console.log("Site Alvo:", fallbackUrl);
-
             const hrefRegex = /href=["']([^"']+)["']/gi;
             const titleSlug = normalizedTitle.replace(/\s+/g, '-');
             const titleSlugNoSpaces = normalizedTitle.replace(/\s+/g, '');
@@ -178,8 +180,6 @@ export class ReleaseMonitorService {
             while ((match = hrefRegex.exec(html)) !== null) {
                 links.add(match[1]);
             }
-
-            console.log(`Extraídos ${links.size} links totais da página para avaliação.`);
 
             let bestScore = 0;
             let bestHref = fallbackUrl;
@@ -217,16 +217,12 @@ export class ReleaseMonitorService {
                 }
             }
             
-            console.log(`🏆 [VENCEDOR] Score Final: ${bestScore} | URL Selecionado: ${bestHref}`);
-            console.groupEnd();
-
             try {
                 return new URL(bestHref, fallbackUrl).href;
             } catch (e) {
                 return bestHref.startsWith('http') ? bestHref : fallbackUrl;
             }
         } catch (e) { 
-            console.error("[MAL Highlighter Debug] Falha na regex ou parsing:", e);
             return null; 
         }
     }
@@ -246,7 +242,6 @@ export class ReleaseMonitorService {
         for (const item of items) {
             const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
             
-            // INTEGRAÇÃO DE TRADUÇÃO AQUI
             const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
             const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
             
@@ -275,7 +270,6 @@ export class ReleaseMonitorService {
     static async saveToHistory(items, lang) {
         const timestamp = Date.now();
         const newEntries = items.map(item => {
-            // INTEGRAÇÃO DE TRADUÇÃO AQUI
             const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
             return { 
                 text: `${item.title} - ${prefix} ${item.nextEp}`, 

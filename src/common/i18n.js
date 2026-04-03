@@ -41,6 +41,7 @@ const DICTIONARY = {
         lblEnableTransparency: "Transparent Panel (Hover to view)",
         lblSavePanelPos: "Save Panel Drag Position",
         lblAutoUpdate: "Auto-Update Progress (URL Sync)",
+        lblAutoDetectSeasons: "Auto-Detect Seasons from Episode Number",
         lblHighlights: "Statuses to Highlight:",
         lblColors: "Status Colors:",
         
@@ -129,6 +130,7 @@ const DICTIONARY = {
         lblEnableTransparency: "Ativar Transparência no Painel",
         lblSavePanelPos: "Guardar Posição do Painel",
         lblAutoUpdate: "Atualizar Progresso Autom.",
+        lblAutoDetectSeasons: "Detetar Temporadas Auto. pela Numeração",
         lblHighlights: "Estados a Destacar:",
         lblColors: "Cores dos Estados:",
         

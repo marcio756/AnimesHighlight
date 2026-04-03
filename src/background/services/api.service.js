@@ -3,13 +3,9 @@
  * @description Handles fetching data from MyAnimeList and Jikan APIs.
  * Applies SRP by separating full list fetches (for UI) from active list fetches (for background monitoring).
  */
-import { AuthService } from './auth.js';
+import { AuthService } from './auth.service.js';
 
 export class ActiveItemsSynonymFetcher {
-    /**
-     * Synchronizes synonyms for active items (Watching/Reading) lazily to avoid API rate limits.
-     * @param {Array<Object>} activeItems - Items currently marked with status === 1.
-     */
     static async sync(activeItems) {
         const { mal_synonyms_cache } = await chrome.storage.local.get(['mal_synonyms_cache']);
         const cache = mal_synonyms_cache || {};
@@ -61,12 +57,6 @@ export class ActiveItemsSynonymFetcher {
 }
 
 export class MalService {
-    /**
-     * Fetches a paginated list from MAL.
-     * @param {string} username - Target user.
-     * @param {string} listType - 'animelist' or 'mangalist'.
-     * @param {number} status - 7 for All, 1 for Watching/Reading.
-     */
     static async fetchList(username, listType, status = 7) {
         let allItems = [];
         let offset = 0;
@@ -93,9 +83,6 @@ export class MalService {
         return allItems;
     }
 
-    /**
-     * Normalizes the raw API data into a common structure used by the extension.
-     */
     static normalizeItems(rawList, type) {
         return rawList.map(item => ({
             id: type === 'anime' ? item.anime_id : item.manga_id,
@@ -105,16 +92,12 @@ export class MalService {
             score: item.score,
             type: type,
             progress: type === 'anime' ? (item.num_watched_episodes || 0) : (item.num_read_chapters || 0),
-            total: type === 'anime' ? (item.anime_num_episodes || 0) : (item.manga_num_chapters || 0), // NOVO: Captura o limite máximo
-            // Legacy mapping for backwards compatibility
+            total: type === 'anime' ? (item.anime_num_episodes || 0) : (item.manga_num_chapters || 0),
             num_watched_episodes: item.num_watched_episodes || 0,
             num_read_chapters: item.num_read_chapters || 0
         }));
     }
 
-    /**
-     * Fetches ONLY currently active items (Watching / Reading). Essential for Monitor performance.
-     */
     static async fetchActiveItemsOnly(username) {
         try {
             const [animeList, mangaList] = await Promise.all([
@@ -127,7 +110,6 @@ export class MalService {
                 ...this.normalizeItems(mangaList, 'manga')
             ];
 
-            // Trigger silent background sync for synonyms
             ActiveItemsSynonymFetcher.sync(combined);
 
             return combined;
@@ -137,9 +119,6 @@ export class MalService {
         }
     }
 
-    /**
-     * Fetches the entire list for Highlighting purposes.
-     */
     static async fetchAllUserItems(username) {
         try {
             const [animeList, mangaList] = await Promise.all([
@@ -162,15 +141,12 @@ export class MalService {
         }
     }
 
-    /**
-     * Updates user list entry on MyAnimeList utilizing OAuth2.
-     */
     static async updateListEntry(id, type, params) {
         try {
             const token = await AuthService.getAccessToken();
             const url = `https://api.myanimelist.net/v2/${type}/${id}/my_list_status`;
             
-            const response = await fetch(url, {
+            let response = await fetch(url, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -179,7 +155,32 @@ export class MalService {
                 body: new URLSearchParams(params)
             });
 
-            if (!response.ok) throw new Error('Failed to update MAL list');
+            // Fallback Estrutural: Previne crashs de API se o progresso exceder o limite real do MAL
+            if (!response.ok) {
+                const status = response.status;
+                let errorData = null;
+                try { errorData = await response.json(); } catch(e) {}
+                
+                if (status === 400 && (params.num_watched_episodes || params.num_chapters_read)) {
+                    console.warn("[MAL Highlighter] Numeração excede o limite do MAL. A forçar conclusão da temporada.");
+                    delete params.num_watched_episodes;
+                    delete params.num_chapters_read;
+                    params.status = 2; // "Completed" forçará a API do MAL a preencher automaticamente o máximo correto
+                    
+                    response = await fetch(url, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams(params)
+                    });
+                    
+                    if (!response.ok) throw new Error('Falha no Fallback de segurança do MAL');
+                } else {
+                    throw new Error(`MAL API Rejeitou a atualização: ${errorData?.message || status}`);
+                }
+            }
             return await response.json();
         } catch (error) {
             console.error("[MalService] Error updating entry:", error);

@@ -14,7 +14,7 @@ export class SyncService {
     
     static SYNCABLE_KEYS = [
         'extensionLang', 'panelEnabled', 'panelTransparent', 
-        'savePanelPos', 'autoUpdateProgress', 'highlightStatuses', 
+        'savePanelPos', 'autoUpdateProgress', 'autoDetectSeasons', 'highlightStatuses', 
         'customColors', 'monitoredSites', 'notificationLog', 'seenEpisodes'
     ];
 

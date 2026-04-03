@@ -183,9 +183,12 @@ export class TextNormalizer {
         clean = clean.replace(/\biv\b/g, "4");
         clean = clean.replace(/\bv\b/g, "5");
         clean = clean.replace(/\bvi\b/g, "6");
+        clean = clean.replace(/\bvii\b/g, "7");
+        clean = clean.replace(/\bviii\b/g, "8");
 
-        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|part|parte)\b/g, " s$1 ");
-        clean = clean.replace(/\b(season|temporada|temp|part|parte)\s*([0-9]+)\b/g, " s$2 ");
+        clean = clean.replace(/\b(final season|season final|ultima temporada)\b/g, "s99");
+        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|part|parte|cour|arco|pt)\b/g, " s$1 ");
+        clean = clean.replace(/\b(season|temporada|temp|part|parte|cour|arco|pt)\s*([0-9]+)\b/g, " s$2 ");
         
         clean = clean.replace(/\s+-\s+/g, " "); 
         clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
@@ -195,8 +198,6 @@ export class TextNormalizer {
 
         clean = clean.replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
         if (clean.endsWith('-')) clean = clean.slice(0, -1);
-        
-        clean = clean.replace(/\b([2-9]|1[0-5])\b$/, "s$1");
         
         return clean.trim();
     }
@@ -225,69 +226,78 @@ export class Matcher {
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 
-        const getSeasonNums = (t) => {
-            const explicit = (t.match(/\bs(\d+)\b/g) || []).map(m => m.replace('s', ''));
-            const implicit = (t.match(/\b([2-9]|1[0-5])\b/g) || []);
-            return [...new Set([...explicit, ...implicit])];
-        };
-        
-        const sNumsSite = getSeasonNums(siteTitle);
-        const sNumsMal = getSeasonNums(malTitle);
+        // FASE 1: Extrair as bases puras (sem números nenhuns) para validação rápida de texto
+        const baseSite = siteTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
+        const baseMal = malTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
 
-        const baseSite = siteTitle.replace(/\bs\d+\b/g, '').replace(/\b\d+\b/g, '').replace(/\s+/g, ' ').trim();
-        const baseMal = malTitle.replace(/\bs\d+\b/g, '').replace(/\b\d+\b/g, '').replace(/\s+/g, ' ').trim();
-
-        const baseMatch = baseSite === baseMal || 
-                          (baseMal.length > 4 && baseSite.includes(baseMal)) || 
-                          (baseSite.length > 4 && baseMal.includes(baseSite));
-
-        if (baseMatch) {
-            if (sNumsSite.length > 0 && sNumsMal.length > 0) {
-                const intersection = sNumsSite.filter(n => sNumsMal.includes(n));
-                if (intersection.length === 0) {
-                    SWLogger.log("Match Rejeitado: Temporadas incompativeis", {site: siteTitle, mal: malTitle, siteNums: sNumsSite, malNums: sNumsMal});
-                    return false; 
-                }
-            } else if (sNumsSite.length > 0 && sNumsMal.length === 0) {
-                SWLogger.log(`Match Rejeitado: O Site tem temporada (${sNumsSite[0]}), mas MAL é T1`, {site: siteTitle, mal: malTitle});
-                return false;
-            } else if (sNumsSite.length === 0 && sNumsMal.length > 0) {
-                SWLogger.log(`Match Rejeitado: O Site é T1, mas MAL é temporada (${sNumsMal[0]})`, {site: siteTitle, mal: malTitle});
-                return false;
-            }
-        }
+        let isTextMatch = false;
 
         if (malTitle.includes(siteTitle) || siteTitle.includes(malTitle)) {
-            if (Math.abs(malTitle.length - siteTitle.length) <= 4) return true;
-            if (siteTitle.length >= 12 && malTitle.startsWith(siteTitle)) return true;
+            if (Math.abs(malTitle.length - siteTitle.length) <= 4) isTextMatch = true;
+            if (siteTitle.length >= 12 && malTitle.startsWith(siteTitle)) isTextMatch = true;
         }
 
-        const cleanToken = t => t.replace(/-/g, '');
-        const tokensSite = siteTitle.split(' ').filter(t => t.length > 1 || !isNaN(t.replace('s',''))).map(cleanToken);
-        const tokensMal = malTitle.split(' ').filter(t => t.length > 1 || !isNaN(t.replace('s',''))).map(cleanToken);
-        
-        if (tokensSite.length === 0 || tokensMal.length === 0) return false;
+        if (!isTextMatch) {
+            const cleanToken = t => t.replace(/-/g, '');
+            const tokensSite = baseSite.split(' ').filter(t => t.length > 1).map(cleanToken);
+            const tokensMal = baseMal.split(' ').filter(t => t.length > 1).map(cleanToken);
+            
+            if (tokensSite.length > 0 && tokensMal.length > 0) {
+                let matches = 0;
+                tokensSite.forEach((token, index) => {
+                    if (tokensMal.includes(token)) {
+                        matches++;
+                    } else if (index === tokensSite.length - 1 && token.length >= 3) {
+                        const isTruncated = tokensMal.some(malToken => malToken.startsWith(token));
+                        if (isTruncated) matches++;
+                    }
+                });
 
-        let matches = 0;
-        tokensSite.forEach((token, index) => {
-            if (tokensMal.includes(token)) {
-                matches++;
-            } else if (index === tokensSite.length - 1 && token.length >= 3) {
-                const isTruncated = tokensMal.some(malToken => malToken.startsWith(token));
-                if (isTruncated) matches++;
+                if (tokensSite.length >= 5 && matches >= tokensSite.length - 1) {
+                    isTextMatch = true;
+                } else {
+                    const allTokens = new Set([...tokensSite, ...tokensMal]);
+                    const ratio = matches / (allTokens.size === 0 ? 1 : allTokens.size);
+
+                    if (tokensMal.length < 3) isTextMatch = (ratio >= 1.0);
+                    else {
+                        const allMalTokensPresent = tokensMal.every(t => tokensSite.includes(t));
+                        if (allMalTokensPresent && tokensMal.length >= 3) isTextMatch = (ratio >= 0.6);
+                        else isTextMatch = (ratio >= 0.75);
+                    }
+                }
             }
-        });
+        }
 
-        if (tokensSite.length >= 5 && matches >= tokensSite.length - 1) return true;
+        // FASE 2: Se o texto base não for minimamente idêntico, rejeitamos agora mesmo!
+        // Isto salva mais de 99% do processamento desnecessário.
+        if (!isTextMatch) return false;
 
-        const allTokens = new Set([...tokensSite, ...tokensMal]);
-        const ratio = matches / (allTokens.size === 0 ? 1 : allTokens.size);
-
-        if (tokensMal.length < 3) return ratio >= 1.0;
+        // FASE 3: O texto parece bater certo! Agora vamos verificar se não é um "Clash de Temporadas"
+        const extractNumbers = (t) => {
+            const nums = (t.match(/\d+/g) || []);
+            return [...new Set(nums)];
+        };
         
-        const allMalTokensPresent = tokensMal.every(t => tokensSite.includes(t));
-        if (allMalTokensPresent && tokensMal.length >= 3) return ratio >= 0.6;
+        const numsSite = extractNumbers(siteTitle);
+        const numsMal = extractNumbers(malTitle);
 
-        return ratio >= 0.75;
+        if (numsSite.length > 0 || numsMal.length > 0) {
+            const siteUniques = numsSite.filter(n => !numsMal.includes(n));
+            const malUniques = numsMal.filter(n => !numsSite.includes(n));
+            
+            const isSeasonIndicator = (n) => {
+                const num = parseInt(n, 10);
+                return num >= 2 && num <= 99; 
+            };
+            
+            // Rejeita definitivamente porque um é, por exemplo, a Temporada 2 e o outro é a 1.
+            // Nota: O Logger foi removido daqui para garantir 0% de bloqueios visuais ou envios de IPC no navegador.
+            if (siteUniques.some(isSeasonIndicator) || malUniques.some(isSeasonIndicator)) {
+                return false; 
+            }
+        }
+
+        return true;
     }
 }

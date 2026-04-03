@@ -1,21 +1,26 @@
 // src/content/main.js
 
-import { PerformanceGuard, ContextAnalyzer, TextNormalizer, Matcher, DynamicDebouncer, UI_BLOCKLIST, ProgressExtractor, SWLogger } from './utils.js';
+import { PerformanceGuard, ContextAnalyzer, TextNormalizer, DynamicDebouncer, UI_BLOCKLIST, Matcher } from './utils.js';
 import { SynonymDictionary, DataManager } from './data.js';
 import { UIManager } from './ui.js';
+import { ProgressService } from './services/progress.service.js';
+import { MatcherService } from './services/matcher.service.js';
+import { DOMObserver } from './core/dom.observer.js';
 
 class MalController {
     constructor() {
         this.globalMediaMap = new Map();
-        this.mutationObserver = null;
-        this.intersectionObserver = null;
         this.dynamicDebouncer = null;
         this.isSearching = false;
-        this.isPanelEnabled = true; 
-        this.activeHighlights = [1, 2, 3, 4, 5]; 
         
+        this.isPanelEnabled = true; 
+        this.activeHighlights = [1, 2, 3, 4, 6]; 
         this.autoUpdateProgress = false;
-        this.autoUpdatedId = null;
+        this.autoDetectSeasons = false;
+
+        this.progressService = new ProgressService();
+        this.matcherService = null;
+        this.domObserver = null;
     }
 
     async init() {
@@ -27,6 +32,7 @@ class MalController {
             const settings = await chrome.storage.local.get();
             this.isPanelEnabled = settings.panelEnabled !== false; 
             this.autoUpdateProgress = settings.autoUpdateProgress === true;
+            this.autoDetectSeasons = settings.autoDetectSeasons === true;
             
             if (settings.highlightStatuses) {
                 this.activeHighlights = settings.highlightStatuses;
@@ -36,7 +42,7 @@ class MalController {
             UIManager.setSavePosition(settings.savePanelPos === true);
 
             await UIManager.initLanguage();
-            await UIManager.initTheming(); 
+            await UIManager.initSettings(); 
 
             chrome.storage.onChanged.addListener((changes, area) => {
                 if (area === 'local' && changes.autoUpdateProgress !== undefined) {
@@ -50,15 +56,90 @@ class MalController {
             });
 
             this.globalMediaMap = await DataManager.getUserList();
-            this.startObserver();
+            this.matcherService = new MatcherService(this.globalMediaMap);
+
+            this.dynamicDebouncer = new DynamicDebouncer(() => {
+                const currentMediaType = ContextAnalyzer.guessContentType();
+                let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
+                this.analyzeUrlForPanel(currentMediaType, panelVisible);
+            });
+
+            this.domObserver = new DOMObserver(
+                this.processElement.bind(this),
+                () => this.dynamicDebouncer.trigger()
+            );
+            
+            this.domObserver.start();
+
         } catch (e) {
             console.error("[MAL Highlighter] Init failed", e);
         }
     }
 
+    processElement(element, isListingPage, currentMediaType, panelVisible) {
+        if (element.closest('[data-mal-status]')) return;
+        if (element.offsetParent === null) return; 
+        
+        let text = element.getAttribute('title') || element.getAttribute('aria-label') || element.innerText || "";
+        if (text.length < 3) return;
+        
+        const lowerText = text.toLowerCase();
+        if (UI_BLOCKLIST.some(term => lowerText.includes(term))) return;
+
+        const match = this.matcherService.findMatch(text, currentMediaType);
+
+        if (match) {
+            const card = UIManager.findCardContainer(element);
+            if (card && this.activeHighlights.includes(match.status)) {
+                UIManager.applyVisuals(card, match.status, match.type);
+            }
+        }
+
+        if (this.isPanelEnabled) {
+            const tag = element.tagName;
+            const isHead1 = tag === 'H1'; 
+            const pathName = window.location.pathname;
+            const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
+            
+            const itemTitleRaw = TextNormalizer.normalize(text);
+            const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
+            const titleClean = itemTitle.replace(/\s/g, "");
+            
+            const isInUrl = urlPath.includes(titleClean.replace(/-/g, "")) && titleClean.length > 5;
+            
+            if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
+                if (match) {
+                    this.progressService.attemptAutoUpdate(match, currentMediaType, this.autoUpdateProgress, this.autoDetectSeasons, this.isPanelEnabled); 
+                    if (!document.getElementById('malControlPanel')?.classList.contains('visible')) {
+                        UIManager.showPanel(match.rawTitle || text, match);
+                    }
+                }
+            }
+        }
+    }
+
+    analyzeUrlForPanel(currentMediaType, panelVisible) {
+        const { match, urlTitle } = this.matcherService.matchFromUrl(currentMediaType);
+        
+        if (UI_BLOCKLIST.some(term => urlTitle && TextNormalizer.normalize(urlTitle).includes(term))) return false;
+
+        if (match) {
+            this.progressService.attemptAutoUpdate(match, currentMediaType, this.autoUpdateProgress, this.autoDetectSeasons, this.isPanelEnabled);
+        }
+
+        if (match && !panelVisible) {
+            UIManager.showPanel(match.rawTitle || urlTitle, match);
+            return true;
+        } else if (!panelVisible && !ContextAnalyzer.isListingPage() && urlTitle) {
+            this.searchAndShowPanel(urlTitle);
+            return true;
+        }
+
+        return false;
+    }
+
     searchAndShowPanel(rawTitle) {
-        if (!this.isPanelEnabled) return; 
-        if (this.isSearching) return;
+        if (!this.isPanelEnabled || this.isSearching) return; 
         if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
         
         const cleanQuery = TextNormalizer.normalize(rawTitle);
@@ -69,10 +150,7 @@ class MalController {
 
         const currentMediaType = ContextAnalyzer.guessContentType();
 
-        chrome.runtime.sendMessage({ 
-            action: "SEARCH_ITEM", 
-            title: cleanQuery
-        }, (response) => {
+        chrome.runtime.sendMessage({ action: "SEARCH_ITEM", title: cleanQuery }, (response) => {
             this.isSearching = false;
             document.body.style.cursor = 'default';
             
@@ -87,18 +165,15 @@ class MalController {
                     const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
                     const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
                     const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
-                        ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn)))
-                        : false;
+                        ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn))) : false;
                     
                     const isMatch = Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
-                                    (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) ||
-                                    hasSynonymMatch;
+                                    (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) || hasSynonymMatch;
                     
                     if (!isMatch) continue;
 
                     for (let [localTitle, localDataArray] of this.globalMediaMap.entries()) {
                         const foundInList = localDataArray.find(v => v.id === apiItem.mal_id && v.type === currentMediaType);
-                        
                         if (foundInList) {
                             bestMatch = apiItem;
                             finalStatus = foundInList.status;
@@ -107,8 +182,6 @@ class MalController {
                             if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
                                 SynonymDictionary.save(cleanQuery, localTitle);
                             }
-                            
-                            setTimeout(() => this.startObserver(), 200);
                             break;
                         }
                     }
@@ -118,16 +191,10 @@ class MalController {
                 if (!bestMatch) {
                     for (const apiItem of response.results) {
                         if (apiItem.type !== currentMediaType) continue;
-                        
                         const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
                         const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
-                        const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
-                            ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn)))
-                            : false;
                         
-                        if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
-                           (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) ||
-                           hasSynonymMatch) {
+                        if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm))) {
                             bestMatch = apiItem;
                             finalType = apiItem.type;
                             break;
@@ -140,222 +207,8 @@ class MalController {
                 UIManager.showNotFoundPanel(cleanQuery);
                 return;
             }
-
             UIManager.showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus, type: finalType });
         });
-    }
-
-    startObserver() {
-        if (!document.body) { setTimeout(() => this.startObserver(), 100); return; }
-        
-        const options = {
-            root: null,
-            rootMargin: "250px 0px 250px 0px", 
-            threshold: 0
-        };
-
-        this.intersectionObserver = new IntersectionObserver((entries, observer) => {
-            const isListingPage = ContextAnalyzer.isListingPage();
-            const currentMediaType = ContextAnalyzer.guessContentType();
-            let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
-
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    this.processElement(entry.target, isListingPage, currentMediaType, panelVisible);
-                    observer.unobserve(entry.target); 
-                }
-            });
-        }, options);
-
-        this.dynamicDebouncer = new DynamicDebouncer(() => {
-            const currentMediaType = ContextAnalyzer.guessContentType();
-            let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
-            this.analyzeUrlForPanel(currentMediaType, panelVisible);
-        });
-
-        this.mutationObserver = new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1) { 
-                        this.observeNewElements(node);
-                    }
-                });
-            });
-            this.dynamicDebouncer.trigger();
-        });
-        
-        this.mutationObserver.observe(document.body, { childList: true, subtree: true });
-        this.observeNewElements(document.body);
-        this.dynamicDebouncer.trigger();
-    }
-
-    observeNewElements(rootNode) {
-        const selector = 'a, h1, h2, h3, h4, h5, .title, .name, .serie, .serie-title, [class*="title"], [class*="nome"], article h3, li h3';
-        
-        if (rootNode.matches && rootNode.matches(selector)) {
-             this.intersectionObserver.observe(rootNode);
-        }
-        
-        if (rootNode.querySelectorAll) {
-            const candidates = rootNode.querySelectorAll(selector);
-            candidates.forEach(el => this.intersectionObserver.observe(el));
-        }
-    }
-
-    processElement(element, isListingPage, currentMediaType, panelVisible) {
-        if (element.closest('[data-mal-status]')) return;
-        if (element.offsetParent === null) return; 
-        
-        let text = element.getAttribute('title') || element.getAttribute('aria-label') || element.innerText || "";
-        if (text.length < 3) return;
-        
-        const lowerText = text.toLowerCase();
-        if (UI_BLOCKLIST.some(term => lowerText.includes(term))) return;
-
-        const itemTitleRaw = TextNormalizer.normalize(text);
-        if (!itemTitleRaw || itemTitleRaw.length < 3) return;
-
-        const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
-
-        if (itemTitle.includes("dorohedoro") || itemTitle.includes("jidou") || itemTitle.includes("youkoso")) {
-            SWLogger.log(`Extraído do HTML: "${text}" | Limpo/Resolvido para: "${itemTitle}"`);
-        }
-
-        let matchArray = null;
-        if (this.globalMediaMap.has(itemTitle)) {
-            matchArray = this.globalMediaMap.get(itemTitle);
-        } else {
-            if (itemTitle.length < 150) {
-                for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
-                    if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
-                        matchArray = dataArray;
-                        break;
-                    }
-                    
-                    const hasAlternativeMatch = dataArray.some(node => {
-                        return node.title_eng && Matcher.isFuzzyMatch(itemTitle, TextNormalizer.normalize(node.title_eng));
-                    });
-                    
-                    if (hasAlternativeMatch) {
-                        matchArray = dataArray;
-                        break;
-                    }
-                }
-            }
-        }
-
-        let match = null;
-        if (matchArray && matchArray.length > 0) {
-            match = matchArray.find(m => m.type === currentMediaType);
-        }
-
-        if (match) {
-            const card = UIManager.findCardContainer(element);
-            if (card && this.activeHighlights.includes(match.status)) {
-                UIManager.applyVisuals(card, match.status, match.type);
-            }
-        }
-
-        if (this.isPanelEnabled) {
-            const tag = element.tagName;
-            const isHead1 = tag === 'H1'; 
-            const pathName = window.location.pathname;
-            const urlPath = pathName.toLowerCase().replace(/[^a-z0-9]/g, "");
-            const titleClean = itemTitle.replace(/\s/g, "");
-            
-            const isInUrl = urlPath.includes(titleClean.replace(/-/g, "")) && titleClean.length > 5;
-            
-            if ((isHead1 || isInUrl) && !element.closest('aside, footer, .sidebar, header, nav, .slider, .carousel')) {
-                if (match) {
-                    this.attemptAutoUpdate(match, currentMediaType); 
-                    if (!document.getElementById('malControlPanel')?.classList.contains('visible')) {
-                        UIManager.showPanel(match.rawTitle || text, match);
-                    }
-                }
-            }
-        }
-    }
-
-    attemptAutoUpdate(match, currentMediaType) {
-        if (!this.autoUpdateProgress || !match) return;
-        if (this.autoUpdatedId === match.id) return; 
-
-        const url = window.location.pathname;
-        const title = document.title;
-
-        const currentNum = ProgressExtractor.extract(url, currentMediaType) || ProgressExtractor.extract(title, currentMediaType);
-
-        if (currentNum !== null && currentNum > match.progress) {
-            console.log(`[MAL Highlighter] Auto-updating ${match.rawTitle} to ${currentMediaType === 'manga' ? 'Chapter' : 'Episode'} ${currentNum}`);
-            this.autoUpdatedId = match.id; 
-
-            const field = currentMediaType === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
-
-            chrome.runtime.sendMessage({
-                action: "UPDATE_PROGRESS",
-                id: match.id,
-                mediaType: currentMediaType,
-                data: { [field]: currentNum }
-            }, (response) => {
-                if (response && response.success) {
-                    match.progress = currentNum;
-                    DataManager.updateCacheItem(match.id, currentMediaType, { progress: currentNum });
-                    
-                    const progressInput = document.getElementById('malProgressInput');
-                    if (progressInput) {
-                        progressInput.value = currentNum;
-                    }
-                }
-            });
-        }
-    }
-
-    analyzeUrlForPanel(currentMediaType, panelVisible) {
-        const urlTitle = TextNormalizer.getSlugFromUrl();
-        if (!urlTitle || urlTitle.length <= 3) return false;
-
-        const normUrlTitle = TextNormalizer.normalize(urlTitle);
-        if (UI_BLOCKLIST.some(term => normUrlTitle.includes(term))) return false;
-
-        const resolvedUrlTitle = SynonymDictionary.resolve(normUrlTitle);
-        let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
-        
-        if (!matchArray) {
-            for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
-                if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
-                    matchArray = dataArray;
-                    break;
-                }
-                
-                const hasAlternativeMatch = dataArray.some(node => {
-                    return node.title_eng && Matcher.isFuzzyMatch(resolvedUrlTitle, TextNormalizer.normalize(node.title_eng));
-                });
-                
-                if (hasAlternativeMatch) {
-                    matchArray = dataArray;
-                    break;
-                }
-            }
-        }
-
-        let match = null;
-        if (matchArray && matchArray.length > 0) {
-            match = matchArray.find(m => m.type === currentMediaType);
-        }
-        
-        if (match) {
-            this.attemptAutoUpdate(match, currentMediaType);
-        }
-
-        if (match && !panelVisible) {
-            UIManager.showPanel(match.rawTitle || urlTitle, match);
-            return true;
-        } else if (!panelVisible && !ContextAnalyzer.isListingPage()) {
-            this.searchAndShowPanel(urlTitle);
-            return true;
-        }
-
-        return false;
     }
 }
 
