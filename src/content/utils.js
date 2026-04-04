@@ -186,19 +186,18 @@ export class TextNormalizer {
         clean = clean.replace(/\bvii\b/g, "7");
         clean = clean.replace(/\bviii\b/g, "8");
 
-        clean = clean.replace(/\b(final season|season final|ultima temporada)\b/g, "s99");
-        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|part|parte|cour|arco|pt)\b/g, " s$1 ");
-        clean = clean.replace(/\b(season|temporada|temp|part|parte|cour|arco|pt)\s*([0-9]+)\b/g, " s$2 ");
+        clean = clean.replace(/\b(final season|season final|ultima temporada)\b/g, " 99 ");
+        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|part|parte|cour|arco|pt)\b/g, " $1 ");
+        clean = clean.replace(/\b(season|temporada|temp|part|parte|cour|arco|pt)\s*([0-9]+)\b/g, " $2 ");
         
-        clean = clean.replace(/\s+-\s+/g, " "); 
+        // Transforma TODOS os hífens em espaços para separar palavras ligadas
+        clean = clean.replace(/-/g, " "); 
         clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
         
         const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|manga|mangas|manhwa|online|ver|assistir|ler|net|com|br|org|hd|fhd|4k|q1n)\b/g;
         clean = clean.replace(ignoreRegex, " ");
 
-        clean = clean.replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
-        if (clean.endsWith('-')) clean = clean.slice(0, -1);
-        
+        clean = clean.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
         return clean.trim();
     }
 
@@ -226,7 +225,6 @@ export class Matcher {
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
 
-        // FASE 1: Extrair as bases puras (sem números nenhuns) para validação rápida de texto
         const baseSite = siteTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
         const baseMal = malTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
 
@@ -238,9 +236,8 @@ export class Matcher {
         }
 
         if (!isTextMatch) {
-            const cleanToken = t => t.replace(/-/g, '');
-            const tokensSite = baseSite.split(' ').filter(t => t.length > 1).map(cleanToken);
-            const tokensMal = baseMal.split(' ').filter(t => t.length > 1).map(cleanToken);
+            const tokensSite = baseSite.split(' ').filter(t => t.length > 1);
+            const tokensMal = baseMal.split(' ').filter(t => t.length > 1);
             
             if (tokensSite.length > 0 && tokensMal.length > 0) {
                 let matches = 0;
@@ -269,11 +266,8 @@ export class Matcher {
             }
         }
 
-        // FASE 2: Se o texto base não for minimamente idêntico, rejeitamos agora mesmo!
-        // Isto salva mais de 99% do processamento desnecessário.
         if (!isTextMatch) return false;
 
-        // FASE 3: O texto parece bater certo! Agora vamos verificar se não é um "Clash de Temporadas"
         const extractNumbers = (t) => {
             const nums = (t.match(/\d+/g) || []);
             return [...new Set(nums)];
@@ -291,8 +285,6 @@ export class Matcher {
                 return num >= 2 && num <= 99; 
             };
             
-            // Rejeita definitivamente porque um é, por exemplo, a Temporada 2 e o outro é a 1.
-            // Nota: O Logger foi removido daqui para garantir 0% de bloqueios visuais ou envios de IPC no navegador.
             if (siteUniques.some(isSeasonIndicator) || malUniques.some(isSeasonIndicator)) {
                 return false; 
             }

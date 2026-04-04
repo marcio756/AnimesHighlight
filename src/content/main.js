@@ -44,6 +44,19 @@ class MalController {
             await UIManager.initLanguage();
             await UIManager.initSettings(); 
 
+            // Ouvinte de Eventos Globais do Painel Flutuante
+            window.addEventListener('mal_entry_updated', (e) => {
+                const { id, type, status } = e.detail;
+                if (status) {
+                    const parsedStatus = parseInt(status, 10);
+                    if (this.activeHighlights.includes(parsedStatus)) {
+                        UIManager.updateVisualsById(id, parsedStatus, type);
+                    } else {
+                        UIManager.removeVisualsById(id);
+                    }
+                }
+            });
+
             chrome.storage.onChanged.addListener((changes, area) => {
                 if (area === 'local' && changes.autoUpdateProgress !== undefined) {
                     this.autoUpdateProgress = changes.autoUpdateProgress.newValue === true;
@@ -91,7 +104,8 @@ class MalController {
         if (match) {
             const card = UIManager.findCardContainer(element);
             if (card && this.activeHighlights.includes(match.status)) {
-                UIManager.applyVisuals(card, match.status, match.type);
+                // Modificado: Enviar o ID para permitir a atualização reativa posterior
+                UIManager.applyVisuals(card, match.status, match.type, match.id);
             }
         }
 

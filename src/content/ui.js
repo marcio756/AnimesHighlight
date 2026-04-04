@@ -69,8 +69,16 @@ export class UIManager {
 
     // --- Component Bindings ---
 
-    static applyVisuals(element, statusId, mediaType) {
-        HighlightComponent.apply(element, statusId, mediaType, this.currentLanguage);
+    static applyVisuals(element, statusId, mediaType, mediaId) {
+        HighlightComponent.apply(element, statusId, mediaType, mediaId, this.currentLanguage);
+    }
+
+    static updateVisualsById(mediaId, newStatusId, mediaType) {
+        HighlightComponent.updateAllById(mediaId, newStatusId, mediaType, this.currentLanguage);
+    }
+
+    static removeVisualsById(mediaId) {
+        HighlightComponent.removeAllById(mediaId);
     }
 
     static findCardContainer(titleElement) {

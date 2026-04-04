@@ -31,12 +31,22 @@ export class PanelComponent {
             <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 12px;">
                 
-                <div class="mal-custom-select" id="malStatusSelectWrapper">
-                    <div class="mal-select-trigger" id="malStatusTrigger">
-                        <span id="malStatusLabel">Loading...</span>
-                        <span class="chevron"></span>
+                <div style="display: flex; gap: 8px;">
+                    <div class="mal-custom-select" id="malStatusSelectWrapper" style="flex: 1;">
+                        <div class="mal-select-trigger" id="malStatusTrigger">
+                            <span id="malStatusLabel">Loading...</span>
+                            <span class="chevron"></span>
+                        </div>
+                        <div class="mal-options-container" id="malStatusOptions"></div>
                     </div>
-                    <div class="mal-options-container" id="malStatusOptions"></div>
+
+                    <div class="mal-custom-select" id="malScoreSelectWrapper" style="width: 75px; display: none;">
+                        <div class="mal-select-trigger" id="malScoreTrigger" style="padding-left: 10px; padding-right: 10px;">
+                            <span id="malScoreLabel">★ -</span>
+                            <span class="chevron" style="background-position: right; width: 12px;"></span>
+                        </div>
+                        <div class="mal-options-container" id="malScoreOptions" style="max-height: 180px; overflow-y: auto !important;"></div>
+                    </div>
                 </div>
 
                 <div id="malProgressWrap" class="mal-progress-container" style="display: none;">
@@ -59,9 +69,13 @@ export class PanelComponent {
         DraggableService.init(panel, header, config.savePosition);
 
         document.addEventListener('click', (e) => {
-            const wrapper = document.getElementById('malStatusSelectWrapper');
-            if (wrapper && !wrapper.contains(e.target)) {
-                wrapper.classList.remove('open');
+            const statusWrapper = document.getElementById('malStatusSelectWrapper');
+            const scoreWrapper = document.getElementById('malScoreSelectWrapper');
+            if (statusWrapper && !statusWrapper.contains(e.target)) {
+                statusWrapper.classList.remove('open');
+            }
+            if (scoreWrapper && !scoreWrapper.contains(e.target)) {
+                scoreWrapper.classList.remove('open');
             }
         });
     }
@@ -77,6 +91,7 @@ export class PanelComponent {
         const statusWrapper = document.getElementById('malStatusSelectWrapper');
         const statusLabel = document.getElementById('malStatusLabel');
         const statusOptions = document.getElementById('malStatusOptions');
+        const scoreWrapper = document.getElementById('malScoreSelectWrapper');
         
         const btn = document.getElementById('malOpenBtn');
         const progressWrap = document.getElementById('malProgressWrap');
@@ -89,6 +104,7 @@ export class PanelComponent {
         statusWrapper.style.opacity = '0.5';
         statusWrapper.style.pointerEvents = 'none';
         
+        if (scoreWrapper) scoreWrapper.style.display = 'none';
         progressWrap.style.display = 'none';
         
         btn.innerText = I18nService.get('btnSearchMal', config.language);
@@ -112,6 +128,11 @@ export class PanelComponent {
         const statusTrigger = document.getElementById('malStatusTrigger');
         const statusLabel = document.getElementById('malStatusLabel');
         const statusOptions = document.getElementById('malStatusOptions');
+        
+        const scoreWrapper = document.getElementById('malScoreSelectWrapper');
+        const scoreTrigger = document.getElementById('malScoreTrigger');
+        const scoreLabel = document.getElementById('malScoreLabel');
+        const scoreOptions = document.getElementById('malScoreOptions');
         
         const btn = document.getElementById('malOpenBtn');
         const progressWrap = document.getElementById('malProgressWrap');
@@ -144,7 +165,7 @@ export class PanelComponent {
 
         if (currentStatusStr) {
             const activeOption = statusOptions.querySelector(`.mal-option[data-value="${currentStatusStr}"]`);
-            statusLabel.innerText = activeOption ? activeOption.innerText : I18nService.get('statusPlanned', config.language);
+            statusLabel.innerText = activeOption ? activeOption.textContent : I18nService.get('statusPlanned', config.language);
         } else {
             statusLabel.innerText = I18nService.get('statusAddToList', config.language);
         }
@@ -155,8 +176,8 @@ export class PanelComponent {
 
         statusOptions.querySelectorAll('.mal-option:not(.disabled)').forEach(opt => {
             opt.onclick = (e) => {
-                const newStatus = e.target.getAttribute('data-value');
-                statusLabel.innerText = e.target.innerText;
+                const newStatusStr = opt.getAttribute('data-value');
+                statusLabel.innerText = opt.textContent;
                 statusWrapper.classList.remove('open');
                 
                 statusWrapper.style.opacity = '0.7';
@@ -166,12 +187,18 @@ export class PanelComponent {
                     action: "UPDATE_PROGRESS",
                     id: data.id,
                     mediaType: mediaType,
-                    data: { status: newStatus }
+                    data: { status: newStatusStr }
                 }, (response) => {
                     if (response && response.success) {
-                        const statusId = Object.keys(statusMap).find(key => statusMap[key] === newStatus);
-                        DataManager.updateCacheItem(data.id, mediaType, { status: parseInt(statusId) });
-                        this.show(itemName, { ...data, status: parseInt(statusId) }, config);
+                        const statusId = parseInt(Object.keys(statusMap).find(key => statusMap[key] === newStatusStr));
+                        DataManager.updateCacheItem(data.id, mediaType, { status: statusId });
+                        
+                        // DISPARAR EVENTO DE ATUALIZAÇÃO PARA O RESTO DA PÁGINA
+                        window.dispatchEvent(new CustomEvent('mal_entry_updated', {
+                            detail: { id: data.id, type: mediaType, status: statusId }
+                        }));
+                        
+                        this.show(itemName, { ...data, status: statusId }, config);
                     } else {
                         statusWrapper.style.opacity = '1';
                         statusWrapper.style.pointerEvents = 'auto';
@@ -180,31 +207,85 @@ export class PanelComponent {
             };
         });
 
+        // Setup do Score (Classificação)
+        if (data && data.status) {
+            scoreWrapper.style.display = 'block';
+            const currentScore = data.score || 0;
+            scoreLabel.innerText = currentScore > 0 ? `★ ${currentScore}` : '★ -';
+
+            let scoreHtml = `<div class="mal-option ${currentScore === 0 ? 'selected' : ''}" data-value="0">★ -</div>`;
+            for(let i=10; i>=1; i--) {
+                scoreHtml += `<div class="mal-option ${currentScore === i ? 'selected' : ''}" data-value="${i}">★ ${i}</div>`;
+            }
+            scoreOptions.innerHTML = scoreHtml;
+
+            const newScoreTrigger = scoreTrigger.cloneNode(true);
+            scoreTrigger.parentNode.replaceChild(newScoreTrigger, scoreTrigger);
+
+            newScoreTrigger.onclick = () => {
+                scoreWrapper.classList.toggle('open');
+            };
+
+            scoreOptions.querySelectorAll('.mal-option').forEach(opt => {
+                opt.onclick = (e) => {
+                    const newScore = parseInt(opt.getAttribute('data-value'));
+                    document.getElementById('malScoreLabel').innerText = newScore > 0 ? `★ ${newScore}` : '★ -';
+                    scoreWrapper.classList.remove('open');
+                    
+                    scoreWrapper.style.opacity = '0.7';
+                    scoreWrapper.style.pointerEvents = 'none';
+
+                    chrome.runtime.sendMessage({
+                        action: "UPDATE_PROGRESS",
+                        id: data.id,
+                        mediaType: mediaType,
+                        data: { score: newScore }
+                    }, (response) => {
+                        scoreWrapper.style.opacity = '1';
+                        scoreWrapper.style.pointerEvents = 'auto';
+                        if (response && response.success) {
+                            DataManager.updateCacheItem(data.id, mediaType, { score: newScore });
+                            data.score = newScore;
+                            scoreOptions.querySelectorAll('.mal-option').forEach(o => o.classList.remove('selected'));
+                            opt.classList.add('selected');
+                        }
+                    });
+                };
+            });
+        } else {
+            scoreWrapper.style.display = 'none';
+        }
+
         let field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
 
         const commitProgressUpdate = (finalVal) => {
+            const currentInputEl = document.getElementById('malProgressInput');
+            const currentProgressWrap = document.getElementById('malProgressWrap');
+            const currentAddBtn = document.getElementById('malQuickAddBtn');
+            const currentDecBtn = document.getElementById('malQuickDecBtn');
+
             const oldVal = data.progress;
             if (oldVal === finalVal) {
-                inputEl.value = oldVal; 
+                currentInputEl.value = oldVal; 
                 return;
             }
 
             data.progress = finalVal;
-            inputEl.value = finalVal;
+            currentInputEl.value = finalVal;
             
-            inputEl.classList.remove('pop');
-            void inputEl.offsetWidth; 
-            inputEl.classList.add('pop');
-            progressWrap.classList.add('optimistic-success');
+            currentInputEl.classList.remove('pop');
+            void currentInputEl.offsetWidth; 
+            currentInputEl.classList.add('pop');
+            currentProgressWrap.classList.add('optimistic-success');
             
             setTimeout(() => {
-                inputEl.classList.remove('pop');
-                progressWrap.classList.remove('optimistic-success');
+                currentInputEl.classList.remove('pop');
+                currentProgressWrap.classList.remove('optimistic-success');
             }, 300);
 
-            quickAddBtn.disabled = true;
-            quickDecBtn.disabled = true;
-            inputEl.disabled = true;
+            currentAddBtn.disabled = true;
+            currentDecBtn.disabled = true;
+            currentInputEl.disabled = true;
             
             chrome.runtime.sendMessage({
                 action: "UPDATE_PROGRESS",
@@ -212,15 +293,20 @@ export class PanelComponent {
                 mediaType: mediaType,
                 data: { [field]: finalVal }
             }, (response) => {
-                quickAddBtn.disabled = false;
-                quickDecBtn.disabled = false;
-                inputEl.disabled = false;
+                currentAddBtn.disabled = false;
+                currentDecBtn.disabled = false;
+                currentInputEl.disabled = false;
 
                 if (response && response.success) {
                     DataManager.updateCacheItem(data.id, mediaType, { progress: finalVal });
+                    
+                    // DISPARAR EVENTO DE ATUALIZAÇÃO PARA O RESTO DA PÁGINA
+                    window.dispatchEvent(new CustomEvent('mal_entry_updated', {
+                        detail: { id: data.id, type: mediaType, progress: finalVal }
+                    }));
                 } else {
                     data.progress = oldVal;
-                    inputEl.value = oldVal;
+                    currentInputEl.value = oldVal;
                 }
             });
         };
@@ -250,15 +336,15 @@ export class PanelComponent {
                 if (maxVal && newVal > maxVal) {
                     if (!config.autoDetectSeasons) {
                         newVal = maxVal; 
-                        inputEl.value = maxVal; 
+                        document.getElementById('malProgressInput').value = maxVal; 
                         commitProgressUpdate(newVal);
                     } else {
-                        inputEl.value = maxVal;
+                        document.getElementById('malProgressInput').value = maxVal;
                         
-                        inputEl.disabled = true;
-                        quickAddBtn.disabled = true;
-                        quickDecBtn.disabled = true;
-                        progressWrap.style.opacity = '0.7';
+                        document.getElementById('malProgressInput').disabled = true;
+                        document.getElementById('malQuickAddBtn').disabled = true;
+                        document.getElementById('malQuickDecBtn').disabled = true;
+                        document.getElementById('malProgressWrap').style.opacity = '0.7';
                         document.getElementById('malPanelTitle').innerText = I18nService.get('statusChecking', config.language);
                         
                         chrome.runtime.sendMessage({
@@ -267,10 +353,10 @@ export class PanelComponent {
                             mediaType: mediaType,
                             progress: newVal
                         }, (response) => {
-                            inputEl.disabled = false;
-                            quickAddBtn.disabled = false;
-                            quickDecBtn.disabled = false;
-                            progressWrap.style.opacity = '1';
+                            document.getElementById('malProgressInput').disabled = false;
+                            document.getElementById('malQuickAddBtn').disabled = false;
+                            document.getElementById('malQuickDecBtn').disabled = false;
+                            document.getElementById('malProgressWrap').style.opacity = '1';
                             
                             if (response && response.success && response.data) {
                                 const resolved = response.data;
@@ -293,6 +379,11 @@ export class PanelComponent {
                                             total: resolved.max || 0
                                         };
                                         DataManager.updateCacheItem(resolved.resolvedId, mediaType, newData);
+                                        
+                                        window.dispatchEvent(new CustomEvent('mal_entry_updated', {
+                                            detail: { id: resolved.resolvedId, type: mediaType, status: 1, progress: resolved.resolvedProgress }
+                                        }));
+
                                         this.show(resolved.title, newData, config);
                                     });
                                     return;
@@ -316,7 +407,7 @@ export class PanelComponent {
             quickDecBtn.onclick = () => updateProgressOptimistic(data.progress - 1);
 
             const newChangeHandler = (e) => updateProgressOptimistic(parseInt(e.target.value, 10));
-            const newKeyHandler = (e) => { if (e.key === 'Enter') inputEl.blur(); };
+            const newKeyHandler = (e) => { if (e.key === 'Enter') document.getElementById('malProgressInput').blur(); };
             
             const newInputEl = inputEl.cloneNode(true);
             inputEl.parentNode.replaceChild(newInputEl, inputEl);

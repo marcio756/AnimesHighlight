@@ -1,3 +1,5 @@
+// src/background/services/auth.service.js
+
 /**
  * Authentication Service
  * @description Handles OAuth2 PKCE flow for MyAnimeList API, token storage, and automatic token refreshing.
@@ -112,16 +114,34 @@ export class AuthService {
                     url: authUrl,
                     interactive: true
                 }, async (redirectUrl) => {
-                    if (chrome.runtime.lastError || !redirectUrl) {
-                        console.error("[Auth] Erro no fluxo ou cancelado:", chrome.runtime.lastError);
-                        return reject(new Error('Authentication failed or cancelled.'));
+                    
+                    // Tratamento correto do objeto de erro do Chrome
+                    if (chrome.runtime.lastError) {
+                        const errorMsg = chrome.runtime.lastError.message || JSON.stringify(chrome.runtime.lastError);
+                        console.error("[Auth] Erro no fluxo ou cancelado pelo Chrome:", errorMsg);
+                        return reject(new Error(`Falha no popup de Autenticação: ${errorMsg}`));
                     }
 
-                    const urlParams = new URLSearchParams(new URL(redirectUrl).search);
+                    if (!redirectUrl) {
+                        console.error("[Auth] Nenhum URL de redirecionamento recebido.");
+                        return reject(new Error('Autenticação cancelada ou nenhum URL recebido.'));
+                    }
+
+                    // Verifica se o MAL enviou erros pela barra de endereço
+                    const urlObj = new URL(redirectUrl);
+                    const urlParams = new URLSearchParams(urlObj.search);
+                    
+                    if (urlParams.has('error')) {
+                        const malError = urlParams.get('error');
+                        const malErrorDesc = urlParams.get('error_description') || 'Sem descrição fornecida pelo MAL';
+                        console.error(`[Auth] O MyAnimeList rejeitou o pedido: ${malError} - ${malErrorDesc}`);
+                        return reject(new Error(`O MyAnimeList bloqueou o acesso: ${malError}`));
+                    }
+
                     const code = urlParams.get('code');
 
                     if (!code) {
-                        return reject(new Error('No auth code received from MAL.'));
+                        return reject(new Error('Nenhum código de autenticação recebido do MAL.'));
                     }
 
                     try {
@@ -158,7 +178,7 @@ export class AuthService {
                             resolve(tokenData.access_token);
                         } else {
                             console.error("[Auth] Resposta do servidor sem token:", tokenData);
-                            reject(new Error('Failed to retrieve access token from server response.'));
+                            reject(new Error('Falha ao obter o token na resposta do servidor.'));
                         }
                     } catch (err) {
                         console.error("[Auth] Erro no fetch do token:", err);
