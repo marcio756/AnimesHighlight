@@ -2,10 +2,29 @@
 
 import { TextNormalizer, CONFIG } from './utils.js';
 
+export class RelationDictionary {
+    static relationsCache = {};
+    
+    static async init() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['mal_relations_cache'], (res) => {
+                this.relationsCache = res.mal_relations_cache || {};
+                resolve();
+            });
+        });
+    }
+
+    static getRelations() {
+        return this.relationsCache;
+    }
+}
+
 export class SynonymDictionary {
     static cache = {};
 
     static async init() {
+        await RelationDictionary.init(); // Inicializa também as relações
+        
         return new Promise((resolve) => {
             chrome.storage.local.get(['mal_synonyms_cache', 'synonym_version'], (res) => {
                 if (res.synonym_version !== 3) {

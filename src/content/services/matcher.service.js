@@ -1,18 +1,89 @@
 // src/content/services/matcher.service.js
 
-import { TextNormalizer, Matcher, SWLogger } from '../utils.js';
-import { SynonymDictionary } from '../data.js';
+import { TextNormalizer, Matcher, SWLogger, SeasonExtractor } from '../utils.js';
+import { SynonymDictionary, RelationDictionary } from '../data.js';
 
 export class MatcherService {
     constructor(globalMediaMap) {
         this.globalMediaMap = globalMediaMap;
+        this.relations = RelationDictionary.getRelations();
+        this.seasonChains = this.buildSeasonChains();
+    }
+
+    /**
+     * Constrói as Season Chains para cada anime ativo, usando os dados de relação (prequels).
+     * @returns {Map} Um mapa ligando a base do nome a um array de temporadas sequenciais.
+     */
+    buildSeasonChains() {
+        const chains = new Map();
+        
+        // Função auxiliar para encontrar a raiz (Temporada 1) de uma entrada
+        const findRootId = (startId) => {
+            let currentId = startId;
+            let visited = new Set([currentId]);
+            while (this.relations[currentId] && this.relations[currentId].prequels && this.relations[currentId].prequels.length > 0) {
+                const preId = this.relations[currentId].prequels[0];
+                if (visited.has(preId)) break; // Prevents circular loops
+                currentId = preId;
+                visited.add(currentId);
+            }
+            return currentId;
+        };
+
+        // Percorre a lista global do utilizador e constrói cadeias lógicas
+        for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
+            dataArray.forEach(item => {
+                const rootId = findRootId(item.id);
+                
+                // Procurar qual item do utilizador corresponde a este rootId para saber o nome base
+                let rootTitle = malTitle;
+                for (let [t, dArray] of this.globalMediaMap.entries()) {
+                    if (dArray.some(d => d.id === rootId)) {
+                        rootTitle = SeasonExtractor.getBaseTitle(t);
+                        break;
+                    }
+                }
+
+                // Deduzir um pseudo-número de temporada baseado na profundidade na cadeia
+                let depth = 1;
+                let currentId = rootId;
+                let visited = new Set([currentId]);
+                
+                while (currentId !== item.id) {
+                    if (this.relations[currentId] && this.relations[currentId].sequels && this.relations[currentId].sequels.length > 0) {
+                        currentId = this.relations[currentId].sequels[0];
+                        if (visited.has(currentId)) break;
+                        visited.add(currentId);
+                        depth++;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (!chains.has(rootTitle)) chains.set(rootTitle, []);
+                
+                // Apenas adiciona se ainda não existir
+                const chainArr = chains.get(rootTitle);
+                if (!chainArr.some(c => c.id === item.id)) {
+                    chainArr.push({
+                        id: item.id,
+                        title: malTitle,
+                        seasonNumber: depth,
+                        type: item.type,
+                        status: item.status,
+                        progress: item.progress,
+                        total: item.total
+                    });
+                }
+            });
+        }
+        
+        return chains;
     }
 
     /**
      * Identifies the exact or fuzzy match for a given raw title from the global media map.
-     * @param {string} rawText - The raw text extracted from the DOM.
-     * @param {string} currentMediaType - The media type ('anime' or 'manga').
-     * @returns {Object|null} The matched media object or null.
+     * Integrates the new SeasonChain logic.
      */
     findMatch(rawText, currentMediaType) {
         const itemTitleRaw = TextNormalizer.normalize(rawText);
@@ -20,10 +91,22 @@ export class MatcherService {
 
         const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
 
-        if (itemTitle.includes("dorohedoro") || itemTitle.includes("jidou") || itemTitle.includes("youkoso")) {
-            SWLogger.log(`Extraído do HTML: "${rawText}" | Limpo/Resolvido para: "${itemTitle}"`);
+        // 1. Tentar Match via Season Chain
+        const extractedSeason = SeasonExtractor.extractSeasonNumber(rawText);
+        const baseTitleSite = SeasonExtractor.getBaseTitle(itemTitle);
+        
+        if (extractedSeason > 1 && baseTitleSite.length > 3) {
+            for (let [baseMalTitle, chain] of this.seasonChains.entries()) {
+                if (Matcher.isFuzzyMatch(baseTitleSite, baseMalTitle)) {
+                    const seasonMatch = chain.find(c => c.seasonNumber === extractedSeason && c.type === currentMediaType);
+                    if (seasonMatch) {
+                        return seasonMatch; // Retorna imediatamente o match da cadeia
+                    }
+                }
+            }
         }
 
+        // 2. Fallback para o Fuzzy Match Clássico
         let matchArray = null;
         if (this.globalMediaMap.has(itemTitle)) {
             matchArray = this.globalMediaMap.get(itemTitle);
@@ -56,8 +139,6 @@ export class MatcherService {
 
     /**
      * Analyzes the URL slug to attempt finding a media match.
-     * @param {string} currentMediaType - The media type ('anime' or 'manga').
-     * @returns {Object} An object containing the match and the extracted URL title.
      */
     matchFromUrl(currentMediaType) {
         const urlTitle = TextNormalizer.getSlugFromUrl();
@@ -66,6 +147,7 @@ export class MatcherService {
         const normUrlTitle = TextNormalizer.normalize(urlTitle);
         const resolvedUrlTitle = SynonymDictionary.resolve(normUrlTitle);
         
+        // Pode ser útil aplicar a lógica SeasonChain também aos URLs no futuro, mas mantemos o clássico como pedido
         let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
         
         if (!matchArray) {

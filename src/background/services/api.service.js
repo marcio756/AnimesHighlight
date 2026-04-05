@@ -1,3 +1,5 @@
+// src/background/services/api.service.js
+
 /**
  * API Communication Layer
  * @description Handles fetching data from MyAnimeList and Jikan APIs.
@@ -7,13 +9,14 @@ import { AuthService } from './auth.service.js';
 
 export class ActiveItemsSynonymFetcher {
     static async sync(activeItems) {
-        const { mal_synonyms_cache } = await chrome.storage.local.get(['mal_synonyms_cache']);
-        const cache = mal_synonyms_cache || {};
+        const storageData = await chrome.storage.local.get(['mal_synonyms_cache', 'mal_relations_cache']);
+        const cache = storageData.mal_synonyms_cache || {};
+        const relationsCache = storageData.mal_relations_cache || {};
         let updated = false;
 
         for (const item of activeItems) {
             const normTitle = item.title.toLowerCase();
-            const syncKey = `jikan_sync_${item.type}_${item.id}`;
+            const syncKey = `jikan_sync_v2_${item.type}_${item.id}`;
             
             const storageRes = await chrome.storage.local.get(syncKey);
             if (storageRes[syncKey]) continue;
@@ -29,6 +32,7 @@ export class ActiveItemsSynonymFetcher {
                 
                 const { data } = await res.json();
                 
+                // Mapear Sinónimos
                 if (data.title_synonyms && Array.isArray(data.title_synonyms)) {
                     data.title_synonyms.forEach(syn => {
                         const cleanSyn = syn.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
@@ -42,16 +46,40 @@ export class ActiveItemsSynonymFetcher {
                     if (cleanEng) cache[cleanEng] = normTitle;
                     updated = true;
                 }
+
+                // Extrair Relações (Sequels e Prequels) para construir a Season Chain
+                if (data.relations && Array.isArray(data.relations)) {
+                    let prequels = [];
+                    let sequels = [];
+                    
+                    data.relations.forEach(rel => {
+                        if (rel.relation === 'Prequel' && rel.entry) {
+                            prequels.push(...rel.entry.filter(e => e.type === item.type).map(e => e.mal_id));
+                        }
+                        if (rel.relation === 'Sequel' && rel.entry) {
+                            sequels.push(...rel.entry.filter(e => e.type === item.type).map(e => e.mal_id));
+                        }
+                    });
+
+                    relationsCache[item.id] = {
+                        prequels: prequels,
+                        sequels: sequels
+                    };
+                    updated = true;
+                }
                 
                 await chrome.storage.local.set({ [syncKey]: true });
                 await new Promise(resolve => setTimeout(resolve, 1500)); 
             } catch (error) {
-                console.error("[ActiveItemsSynonymFetcher] Error fetching synonyms:", error);
+                console.error("[ActiveItemsSynonymFetcher] Error fetching data:", error);
             }
         }
 
         if (updated) {
-            await chrome.storage.local.set({ mal_synonyms_cache: cache });
+            await chrome.storage.local.set({ 
+                mal_synonyms_cache: cache,
+                mal_relations_cache: relationsCache
+            });
         }
     }
 }
@@ -155,17 +183,16 @@ export class MalService {
                 body: new URLSearchParams(params)
             });
 
-            // Fallback Estrutural: Previne crashs de API se o progresso exceder o limite real do MAL
             if (!response.ok) {
                 const status = response.status;
                 let errorData = null;
                 try { errorData = await response.json(); } catch(e) {}
                 
                 if (status === 400 && (params.num_watched_episodes || params.num_chapters_read)) {
-                    console.warn("[MAL Highlighter] Numeração excede o limite do MAL. A forçar conclusão da temporada.");
+                    console.warn("[MAL Highlighter] Numeração excede limite do MAL. A forçar conclusão da temporada.");
                     delete params.num_watched_episodes;
                     delete params.num_chapters_read;
-                    params.status = 2; // "Completed" forçará a API do MAL a preencher automaticamente o máximo correto
+                    params.status = 2; 
                     
                     response = await fetch(url, {
                         method: 'PATCH',

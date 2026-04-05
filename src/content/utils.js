@@ -45,6 +45,51 @@ export class SWLogger {
     }
 }
 
+export class SeasonExtractor {
+    static extractSeasonNumber(text) {
+        if (!text) return null;
+        let clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        // Match explícito: S4, Season 4, T4, Temporada 4, Part 4, Cour 4
+        let match = clean.match(/\b(s|season|temporada|temp|t|part|parte|cour)\s*0*(\d+)\b/i);
+        if (match && match[2]) return parseInt(match[2], 10);
+        
+        // Match ordinais: 4th Season, 4ª Temporada
+        match = clean.match(/\b0*(\d+)(st|nd|rd|th|ª|º)\s*(season|temporada|temp|t)\b/i);
+        if (match && match[1]) return parseInt(match[1], 10);
+
+        // Match Romanos
+        const romanMatch = clean.match(/\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b(?:\s*)$/i);
+        if (romanMatch && romanMatch[1]) {
+            const r = romanMatch[1].toLowerCase();
+            const romanMap = { 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10 };
+            return romanMap[r];
+        }
+
+        // Match número arábico solto no final (ex: Shingeki no Kyojin 4)
+        const endNumMatch = clean.match(/\b0*(\d+)\b(?:\s*)$/);
+        if (endNumMatch && endNumMatch[1]) {
+            const num = parseInt(endNumMatch[1], 10);
+            if (num > 1 && num <= 20) return num; // Evita confundir anos ou episódios soltos muito altos
+        }
+        
+        return 1; // Assumir temporada 1 se nada for encontrado
+    }
+
+    static getBaseTitle(text) {
+        if (!text) return "";
+        let clean = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        // Remove os indicadores de temporada para ficar apenas com a base da franquia
+        clean = clean.replace(/\b(s|season|temporada|temp|t|part|parte|cour)\s*0*(\d+)\b/ig, "");
+        clean = clean.replace(/\b0*(\d+)(st|nd|rd|th|ª|º)\s*(season|temporada|temp|t)\b/ig, "");
+        clean = clean.replace(/\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b(?:\s*)$/ig, "");
+        clean = clean.replace(/\b0*(\d+)\b(?:\s*)$/g, ""); // trailing numbers
+        
+        return clean.trim();
+    }
+}
+
 export class ProgressExtractor {
     static extract(text, mediaType) {
         if (!text) return null;
@@ -176,27 +221,29 @@ export class TextNormalizer {
         let clean = String(str).toLowerCase();
         clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
         
+        // Remove numerações de episódios antes de processar temporadas
         clean = clean.replace(/\b(episodio|episode|ep|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
         
-        clean = clean.replace(/\bii\b/g, "2");
-        clean = clean.replace(/\biii\b/g, "3");
-        clean = clean.replace(/\biv\b/g, "4");
-        clean = clean.replace(/\bv\b/g, "5");
-        clean = clean.replace(/\bvi\b/g, "6");
-        clean = clean.replace(/\bvii\b/g, "7");
-        clean = clean.replace(/\bviii\b/g, "8");
+        // Converte romanos apenas se estiverem isolados no texto original (para evitar apagar letras do meio de palavras)
+        const romanMap = {
+            '\\bii\\b': '2', '\\biii\\b': '3', '\\biv\\b': '4', '\\bv\\b': '5',
+            '\\bvi\\b': '6', '\\bvii\\b': '7', '\\bviii\\b': '8'
+        };
+        for(let r in romanMap) {
+            clean = clean.replace(new RegExp(r, 'g'), romanMap[r]);
+        }
 
-        clean = clean.replace(/\b(final season|season final|ultima temporada)\b/g, " 99 ");
-        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|part|parte|cour|arco|pt)\b/g, " $1 ");
-        clean = clean.replace(/\b(season|temporada|temp|part|parte|cour|arco|pt)\s*([0-9]+)\b/g, " $2 ");
-        
-        // Transforma TODOS os hífens em espaços para separar palavras ligadas
-        clean = clean.replace(/-/g, " "); 
-        clean = clean.replace(/[\[\]\(\)\_\.]/g, " "); 
-        
-        const ignoreRegex = /\b(tv|movie|legendado|leg|dublado|dubbed|dub|filme|filmes|animes|anime|manga|mangas|manhwa|online|ver|assistir|ler|net|com|br|org|hd|fhd|4k|q1n)\b/g;
+        // Padronização rigorosa pedida: remover ruído específico e termos de qualidade/legenda
+        const ignoreRegex = /\b(the final|final season|season final|ultima temporada|part|parte|cour|arc|arco|chapter|fhd|hd|dublado|legendado|online|tv|movie|leg|dubbed|dub|filme|filmes|animes|anime|manga|mangas|manhwa|ver|assistir|ler|net|com|br|org|q1n)\b/g;
         clean = clean.replace(ignoreRegex, " ");
 
+        // Uniformiza indicadores de temporada
+        clean = clean.replace(/\b([0-9]+)(st|nd|rd|th|ª|º)?\s*(season|temporada|temp|t)\b/g, " $1 ");
+        clean = clean.replace(/\b(s|season|temporada|temp|t)\s*0*([0-9]+)\b/g, " $2 ");
+        
+        // Transforma TODOS os hífens e pontuação em espaços
+        clean = clean.replace(/[\-\[\]\(\)\_\.]/g, " "); 
+        
         clean = clean.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
         return clean.trim();
     }
