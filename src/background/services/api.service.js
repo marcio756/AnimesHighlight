@@ -5,26 +5,7 @@
  * @description Handles fetching data from MyAnimeList and Jikan APIs with strict rate limiting, timeout protection, and automatic OAuth2 token refreshing.
  */
 import { AuthService } from './auth.service.js';
-
-/**
- * Utility function to execute fetch requests with a strict timeout.
- * @param {string} url - The target URL.
- * @param {Object} options - Fetch options.
- * @param {number} timeoutMs - Timeout in milliseconds (default: 8000ms).
- * @returns {Promise<Response>}
- */
-async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
-        clearTimeout(id);
-        return response;
-    } catch (error) {
-        clearTimeout(id);
-        throw error;
-    }
-}
+import { NetworkService } from '../../common/network.service.js';
 
 /**
  * Jikan API Rate Limiter
@@ -53,7 +34,7 @@ class JikanRateLimiter {
         const { url, resolve, reject } = this.queue.shift();
 
         try {
-            const response = await fetchWithTimeout(url, {}, 8000);
+            const response = await NetworkService.fetchWithTimeout(url, {}, 8000);
             if (!response.ok) {
                 if (response.status === 429) {
                     console.warn("[JikanRateLimiter] 429 Too Many Requests. Backing off.");
@@ -159,7 +140,7 @@ export class MalService {
         while (hasMore && offset < 50000) { 
             const malUrl = `https://myanimelist.net/${listType}/${username}/load.json?status=${status}&offset=${offset}&_t=${Date.now()}`;
             try {
-                const res = await fetchWithTimeout(malUrl, {}, 8000);
+                const res = await NetworkService.fetchWithTimeout(malUrl, {}, 8000);
                 if (!res.ok) throw new Error(`MAL API Error: Private or Invalid Profile for ${listType}`);
                 
                 const data = await res.json();
@@ -179,14 +160,13 @@ export class MalService {
 
     static normalizeItems(rawList, type) {
         return rawList.map(item => {
-            // Data Validation Protection
             const rawEps = type === 'anime' ? item.anime_num_episodes : item.manga_num_chapters;
             const validTotal = (typeof rawEps === 'number' && rawEps > 0) ? rawEps : 0;
             
             const rawProgress = type === 'anime' ? item.num_watched_episodes : item.num_read_chapters;
             const validProgress = (typeof rawProgress === 'number' && rawProgress > 0) ? rawProgress : 0;
 
-            const validStatus = item.status ? item.status : 6; // Default to Planned if missing
+            const validStatus = item.status ? item.status : 6;
 
             return {
                 id: type === 'anime' ? item.anime_id : item.manga_id,
@@ -250,7 +230,7 @@ export class MalService {
             const token = await AuthService.getAccessToken();
             const url = `https://api.myanimelist.net/v2/${type}/${id}/my_list_status`;
             
-            let response = await fetchWithTimeout(url, {
+            let response = await NetworkService.fetchWithTimeout(url, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -259,7 +239,6 @@ export class MalService {
                 body: new URLSearchParams(params)
             }, 8000);
 
-            // Automatic Token Refresh Fallback
             if (response.status === 401 && !isRetry) {
                 console.warn("[MalService] 401 Unauthorized. Attempting automatic token refresh...");
                 await new Promise(resolve => {
@@ -280,7 +259,14 @@ export class MalService {
             if (!response.ok) {
                 const status = response.status;
                 let errorData = null;
-                try { errorData = await response.json(); } catch(e) {}
+                
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    try { errorData = await response.json(); } catch(e) {}
+                } else {
+                    const textData = await response.text();
+                    console.warn(`[MalService] HTML Error Response (Status ${status}):`, textData.substring(0, 100));
+                }
                 
                 if (status === 400 && (params.num_watched_episodes || params.num_chapters_read)) {
                     console.warn("[MAL Highlighter] Cap limit exceeded. Forcing completion status.");
@@ -288,7 +274,7 @@ export class MalService {
                     delete params.num_chapters_read;
                     params.status = 2; 
                     
-                    response = await fetchWithTimeout(url, {
+                    response = await NetworkService.fetchWithTimeout(url, {
                         method: 'PATCH',
                         headers: {
                             'Authorization': `Bearer ${token}`,

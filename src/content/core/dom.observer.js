@@ -54,14 +54,29 @@ export class DOMObserver {
 
         this.mutationObserver = new MutationObserver((mutations) => {
             try {
-                mutations.forEach(mutation => {
-                    mutation.addedNodes.forEach(node => {
+                let hasRelevantChanges = false;
+                
+                for (const mutation of mutations) {
+                    // Ignorar mudanças de texto puras ou atributos
+                    if (mutation.type !== 'childList') continue;
+                    
+                    for (const node of mutation.addedNodes) {
+                        // Apenas elementos do tipo Node.ELEMENT_NODE (1), ignorando nós de texto (3) e comentários (8)
                         if (node.nodeType === 1) { 
+                            // Ignorar injeções de scripts e estilos
+                            const tag = node.tagName.toLowerCase();
+                            if (tag === 'script' || tag === 'style' || tag === 'link') continue;
+                            
                             this.observeNewElements(node);
+                            hasRelevantChanges = true;
                         }
-                    });
-                });
-                if (this.debounceCallback) this.debounceCallback();
+                    }
+                }
+                
+                // Dispara o debounce apenas se houve mudanças estruturais reais
+                if (hasRelevantChanges && this.debounceCallback) {
+                    this.debounceCallback();
+                }
             } catch (error) {
                 console.warn("[DOMObserver] Silent error processing mutation:", error);
             }

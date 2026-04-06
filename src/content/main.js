@@ -5,6 +5,7 @@ import { SynonymDictionary, DataManager } from './data.js';
 import { UIManager } from './ui.js';
 import { ProgressService } from './services/progress.service.js';
 import { MatcherService } from './services/matcher.service.js';
+import { SearchService } from './services/search.service.js';
 import { DOMObserver } from './core/dom.observer.js';
 
 class MalController {
@@ -104,7 +105,6 @@ class MalController {
         if (match) {
             const card = UIManager.findCardContainer(element);
             if (card && this.activeHighlights.includes(match.status)) {
-                // Modificado: Enviar o ID para permitir a atualização reativa posterior
                 UIManager.applyVisuals(card, match.status, match.type, match.id);
             }
         }
@@ -152,77 +152,25 @@ class MalController {
         return false;
     }
 
-    searchAndShowPanel(rawTitle) {
+    async searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled || this.isSearching) return; 
         if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
-        
-        const cleanQuery = TextNormalizer.normalize(rawTitle);
-        if (cleanQuery.length < 3) return;
         
         this.isSearching = true;
         document.body.style.cursor = 'wait';
 
         const currentMediaType = ContextAnalyzer.guessContentType();
+        const result = await SearchService.findExternalMatch(rawTitle, currentMediaType, this.globalMediaMap);
 
-        chrome.runtime.sendMessage({ action: "SEARCH_ITEM", title: cleanQuery }, (response) => {
-            this.isSearching = false;
-            document.body.style.cursor = 'default';
-            
-            let bestMatch = null;
-            let finalStatus = null;
-            let finalType = null;
+        this.isSearching = false;
+        document.body.style.cursor = 'default';
 
-            if (response && response.success && response.results) {
-                for (const apiItem of response.results) {
-                    if (apiItem.type !== currentMediaType) continue;
+        if (!result || result.notFound) {
+            UIManager.showNotFoundPanel(result ? result.cleanQuery : rawTitle);
+            return;
+        }
 
-                    const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
-                    const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
-                    const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
-                        ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn))) : false;
-                    
-                    const isMatch = Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || 
-                                    (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) || hasSynonymMatch;
-                    
-                    if (!isMatch) continue;
-
-                    for (let [localTitle, localDataArray] of this.globalMediaMap.entries()) {
-                        const foundInList = localDataArray.find(v => v.id === apiItem.mal_id && v.type === currentMediaType);
-                        if (foundInList) {
-                            bestMatch = apiItem;
-                            finalStatus = foundInList.status;
-                            finalType = foundInList.type;
-                            
-                            if (cleanQuery !== localTitle && !Matcher.isFuzzyMatch(cleanQuery, localTitle)) {
-                                SynonymDictionary.save(cleanQuery, localTitle);
-                            }
-                            break;
-                        }
-                    }
-                    if (bestMatch) break; 
-                }
-
-                if (!bestMatch) {
-                    for (const apiItem of response.results) {
-                        if (apiItem.type !== currentMediaType) continue;
-                        const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
-                        const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
-                        
-                        if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm))) {
-                            bestMatch = apiItem;
-                            finalType = apiItem.type;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!bestMatch) {
-                UIManager.showNotFoundPanel(cleanQuery);
-                return;
-            }
-            UIManager.showPanel(bestMatch.title, { id: bestMatch.mal_id, status: finalStatus, type: finalType });
-        });
+        UIManager.showPanel(result.title, { id: result.id, status: result.status, type: result.type });
     }
 }
 

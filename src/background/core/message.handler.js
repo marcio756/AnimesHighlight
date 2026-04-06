@@ -11,6 +11,12 @@ export class MessageHandler {
     static init() {
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             
+            // Validação de Segurança de Origem: Rejeita mensagens de origens não reconhecidas
+            if (sender.id !== chrome.runtime.id) {
+                console.warn("[Security] Rejeitado pedido de origem externa suspeita:", sender);
+                return;
+            }
+            
             // Logs do Content Script impressos no Service Worker
             if (request.action === "SW_LOG") {
                 console.group(request.message);

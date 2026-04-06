@@ -4,7 +4,7 @@ import { I18nService } from '../../common/i18n.js';
 
 export class SiteListComponent {
     static render(sites, listEl, emptyEl, callbacks) {
-        listEl.innerHTML = "";
+        listEl.innerHTML = ""; // Limpeza do contentor base
         
         if (!sites || sites.length === 0) {
             emptyEl.style.display = 'block';
@@ -17,6 +17,7 @@ export class SiteListComponent {
 
         sites.forEach((site) => {
             if (site.isSkeleton) {
+                // Skeleton é puramente estático/visual, innerHTML aqui é seguro pois não usa variáveis
                 listEl.innerHTML += `
                     <li class="skeleton-card">
                         <div style="width: 60%;"><div class="skeleton-box skeleton-title"></div><div class="skeleton-box skeleton-subtitle"></div></div>
@@ -27,19 +28,54 @@ export class SiteListComponent {
 
             const li = document.createElement('li');
             li.className = `site-card ${site.enabled ? '' : 'disabled'}`;
-            li.innerHTML = `
-                <div class="site-info" title="${site.url}">
-                    <span class="site-name">${site.name}</span>
-                    <span class="site-url">${site.url}</span>
-                </div>
-                <div class="site-actions">
-                    <label class="switch" style="transform: scale(0.85); margin: 0;">
-                        <input type="checkbox" class="toggle-site" data-id="${site.id}" ${site.enabled ? 'checked' : ''}>
-                        <span class="slider round"></span>
-                    </label>
-                    <button class="btn-icon delete-site" data-id="${site.id}" title="Remove Site" style="border:none; background:transparent; cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">${trashIconSVG}</button>
-                </div>
-            `;
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'site-info';
+            infoDiv.title = site.url; // Seguro contra XSS (Atributo em vez de HTML literal)
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'site-name';
+            nameSpan.textContent = site.name; // Seguro
+            
+            const urlSpan = document.createElement('span');
+            urlSpan.className = 'site-url';
+            urlSpan.textContent = site.url; // Seguro
+            
+            infoDiv.appendChild(nameSpan);
+            infoDiv.appendChild(urlSpan);
+            
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'site-actions';
+            
+            const label = document.createElement('label');
+            label.className = 'switch';
+            label.style.cssText = 'transform: scale(0.85); margin: 0;';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'toggle-site';
+            checkbox.setAttribute('data-id', site.id);
+            if (site.enabled) checkbox.checked = true;
+            
+            const slider = document.createElement('span');
+            slider.className = 'slider round';
+            
+            label.appendChild(checkbox);
+            label.appendChild(slider);
+            
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn-icon delete-site';
+            delBtn.setAttribute('data-id', site.id);
+            delBtn.title = 'Remove Site';
+            delBtn.style.cssText = 'border:none; background:transparent; cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;';
+            delBtn.innerHTML = trashIconSVG; // Estático
+            
+            actionsDiv.appendChild(label);
+            actionsDiv.appendChild(delBtn);
+            
+            li.appendChild(infoDiv);
+            li.appendChild(actionsDiv);
+            
             listEl.appendChild(li);
         });
 
@@ -63,26 +99,34 @@ export class SiteListComponent {
     static updateFilterDropdown(sites, optionsContainerEl, labelEl, currentLang, currentValue, onChangeCallback) {
         if (!optionsContainerEl || !labelEl) return;
         
+        optionsContainerEl.innerHTML = ""; // Limpeza
         const allSitesText = I18nService.get('filterAllSites', currentLang);
-        let html = `<div class="mal-option ${currentValue === 'all' ? 'selected' : ''}" data-value="all">${allSitesText}</div>`;
+        
+        const createOption = (text, value, isSelected) => {
+            const div = document.createElement('div');
+            div.className = `mal-option ${isSelected ? 'selected' : ''}`;
+            div.setAttribute('data-value', value);
+            div.textContent = text; // Seguro
+            return div;
+        };
         
         let currentLabel = allSitesText;
+        optionsContainerEl.appendChild(createOption(allSitesText, 'all', currentValue === 'all'));
 
         if (sites) {
             sites.forEach(site => {
                 const isSelected = currentValue === site.name;
                 if (isSelected) currentLabel = site.name;
-                html += `<div class="mal-option ${isSelected ? 'selected' : ''}" data-value="${site.name}">${site.name}</div>`;
+                optionsContainerEl.appendChild(createOption(site.name, site.name, isSelected));
             });
         }
         
-        optionsContainerEl.innerHTML = html;
-        labelEl.innerText = currentLabel;
+        labelEl.textContent = currentLabel;
 
         optionsContainerEl.querySelectorAll('.mal-option').forEach(opt => {
             opt.addEventListener('click', (e) => {
                 const val = e.target.getAttribute('data-value');
-                labelEl.innerText = e.target.innerText;
+                labelEl.textContent = e.target.textContent;
                 onChangeCallback(val);
             });
         });

@@ -74,12 +74,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const iconMoon = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
 
     const updateThemeIcon = () => {
+        if (!themeToggleBtn) return;
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         themeToggleBtn.innerHTML = isDark ? iconSun : iconMoon;
     };
     updateThemeIcon();
 
-    themeToggleBtn.addEventListener('click', () => {
+    themeToggleBtn?.addEventListener('click', () => {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', newTheme);
@@ -87,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         StorageService.saveSettings({ theme: newTheme });
     });
 
-    historyFilterTrigger.addEventListener('click', () => historyFilterWrapper.classList.toggle('open'));
+    historyFilterTrigger?.addEventListener('click', () => historyFilterWrapper?.classList.toggle('open'));
     document.addEventListener('click', (e) => {
         if (historyFilterWrapper && !historyFilterWrapper.contains(e.target)) historyFilterWrapper.classList.remove('open');
     });
@@ -95,7 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const updateFilter = () => {
         PopupUI.updateSiteFilterDropdown(globalSites, historyFilterOptions, historyFilterLabel, currentLang, currentFilterValue, (newVal) => {
             currentFilterValue = newVal;
-            historyFilterWrapper.classList.remove('open');
+            historyFilterWrapper?.classList.remove('open');
             renderLogs();
             updateFilter(); 
         });
@@ -155,20 +156,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     PopupUI.initSettingsAccordions(); 
 
     const applySettingsToUI = (res) => {
-        if (res.malUsername) {
+        if (res.malUsername && inputUser) {
             inputUser.value = res.malUsername;
             if (res.malAvatar) PopupUI.showProfile(res.malUsername, res.malAvatar, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
         }
-        if (res.extensionLang) langSelect.value = res.extensionLang;
-        if (res.panelEnabled !== undefined) checkPanelEnabled.checked = res.panelEnabled;
-        if (res.panelTransparent !== undefined) checkPanelTrans.checked = res.panelTransparent;
-        if (res.savePanelPos !== undefined) checkSavePanelPos.checked = res.savePanelPos;
-        if (res.autoUpdateProgress !== undefined) checkAutoUpdate.checked = res.autoUpdateProgress;
+        if (res.extensionLang && langSelect) langSelect.value = res.extensionLang;
+        if (res.panelEnabled !== undefined && checkPanelEnabled) checkPanelEnabled.checked = res.panelEnabled;
+        if (res.panelTransparent !== undefined && checkPanelTrans) checkPanelTrans.checked = res.panelTransparent;
+        if (res.savePanelPos !== undefined && checkSavePanelPos) checkSavePanelPos.checked = res.savePanelPos;
+        if (res.autoUpdateProgress !== undefined && checkAutoUpdate) checkAutoUpdate.checked = res.autoUpdateProgress;
         
         if (res.highlightStatuses) hlStatusCheckboxes.forEach(cb => cb.checked = res.highlightStatuses.includes(parseInt(cb.value)));
         if (res.customColors) {
             Object.keys(colorPickers).forEach(id => {
-                if (res.customColors[id]) colorPickers[id].value = res.customColors[id];
+                if (res.customColors[id] && colorPickers[id]) colorPickers[id].value = res.customColors[id];
             });
         }
         syncColorVisibility();
@@ -182,6 +183,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Sincronização Cloud ---
 
     const updateSyncUI = (isLoggedIn, email) => {
+        if (!syncStatusText || !syncActionBtn) return;
+        
         if (isLoggedIn) {
             syncStatusText.removeAttribute('data-i18n');
             syncStatusText.innerText = email || I18nService.get('syncLoggedIn', currentLang);
@@ -190,7 +193,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             syncActionBtn.setAttribute('data-i18n', 'btnLogout');
             syncActionBtn.innerText = I18nService.get('btnLogout', currentLang);
             syncActionBtn.className = "action-btn btn-danger";
-            syncWarningBox.style.display = 'none'; 
+            if (syncWarningBox) syncWarningBox.style.display = 'none'; 
         } else {
             syncStatusText.setAttribute('data-i18n', 'syncNotLoggedIn');
             syncStatusText.innerText = I18nService.get('syncNotLoggedIn', currentLang);
@@ -199,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             syncActionBtn.setAttribute('data-i18n', 'btnLogin');
             syncActionBtn.innerText = I18nService.get('btnLogin', currentLang);
             syncActionBtn.className = "action-btn";
-            syncWarningBox.style.display = 'block'; 
+            if (syncWarningBox) syncWarningBox.style.display = 'block'; 
         }
     };
 
@@ -207,7 +210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateSyncUI(res && res.loggedIn, res?.email);
     });
 
-    syncActionBtn.addEventListener('click', () => {
+    syncActionBtn?.addEventListener('click', () => {
         ProgressService.start();
         const action = syncActionBtn.getAttribute('data-i18n') === 'btnLogout' ? "SYNC_LOGOUT" : "SYNC_LOGIN";
         syncActionBtn.innerText = "...";
@@ -220,8 +223,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- Manipulação de Eventos de Ação (Clicks e Submits) ---
 
-    addSiteBtn.addEventListener('click', () => {
-        const urlRaw = inputNewSiteUrl.value.trim();
+    addSiteBtn?.addEventListener('click', () => {
+        const urlRaw = inputNewSiteUrl?.value?.trim();
         if (!urlRaw) return;
 
         try {
@@ -234,7 +237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             globalSites.push({ id: 'temp', isSkeleton: true });
             PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
-            inputNewSiteUrl.value = "";
+            if(inputNewSiteUrl) inputNewSiteUrl.value = "";
 
             setTimeout(() => {
                 globalSites = globalSites.filter(s => s.id !== 'temp');
@@ -251,31 +254,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    inputNewSiteUrl.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn.click(); });
+    inputNewSiteUrl?.addEventListener('keypress', (e) => { if (e.key === 'Enter') addSiteBtn?.click(); });
 
-    saveSettingsBtn.addEventListener('click', async () => {
+    saveSettingsBtn?.addEventListener('click', async () => {
+        if(!saveSettingsBtn) return;
         saveSettingsBtn.innerText = "...";
         saveSettingsBtn.disabled = true;
 
         const activeHighlights = Array.from(hlStatusCheckboxes).filter(cb => cb.checked).map(cb => parseInt(cb.value));
         const activeColors = {
-            1: colorPickers[1].value, 2: colorPickers[2].value,
-            3: colorPickers[3].value, 4: colorPickers[4].value, 6: colorPickers[6].value
+            1: colorPickers[1]?.value, 2: colorPickers[2]?.value,
+            3: colorPickers[3]?.value, 4: colorPickers[4]?.value, 6: colorPickers[6]?.value
         };
 
         const settings = {
-            extensionLang: langSelect.value, 
-            panelEnabled: checkPanelEnabled.checked, 
-            panelTransparent: checkPanelTrans.checked,
-            savePanelPos: checkSavePanelPos.checked, 
-            autoUpdateProgress: checkAutoUpdate.checked, 
+            extensionLang: langSelect?.value, 
+            panelEnabled: checkPanelEnabled?.checked, 
+            panelTransparent: checkPanelTrans?.checked,
+            savePanelPos: checkSavePanelPos?.checked, 
+            autoUpdateProgress: checkAutoUpdate?.checked, 
             highlightStatuses: activeHighlights, 
             customColors: activeColors
         };
 
         await StorageService.saveSettings(settings);
         
-        currentLang = langSelect.value;
+        currentLang = langSelect?.value || currentLang;
         I18nService.translateDOM(currentLang); 
         updateFilter(); 
         
@@ -284,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         saveSettingsBtn.disabled = false;
     });
 
-    clearNotifsBtn.addEventListener('click', async () => {
+    clearNotifsBtn?.addEventListener('click', async () => {
         if(confirm(I18nService.get('confirmClear', currentLang))) {
             globalLogs = [];
             await StorageService.clearLogs();
@@ -292,14 +296,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    saveProfileBtn.addEventListener('click', async () => {
-        const username = inputUser.value.trim();
+    saveProfileBtn?.addEventListener('click', async () => {
+        const username = inputUser?.value?.trim();
         if (!username) return;
 
         PopupUI.updateStatus(statusProfile, I18nService.get('statusChecking', currentLang), "");
         saveProfileBtn.disabled = true;
-        profileArea.style.display = 'none';
-        profileSkeleton.style.display = 'flex';
+        if(profileArea) profileArea.style.display = 'none';
+        if(profileSkeleton) profileSkeleton.style.display = 'flex';
         ProgressService.start();
 
         try {
@@ -318,7 +322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } catch (error) {
             ProgressService.stop();
-            profileSkeleton.style.display = 'none';
+            if(profileSkeleton) profileSkeleton.style.display = 'none';
             PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
             saveProfileBtn.disabled = false;
         }

@@ -1,8 +1,0 @@
-PROBLEMA 2 — Episódios Contínuos Entre Temporadas ("Episode Offset")
-Muitos sites usam numeração contínua de episódios. Por exemplo: a Temporada 1 tem 12 episódios e a Temporada 2 começa no episódio 13 no site, mas o MAL trata cada temporada como episódio 1. A extensão atualmente mostra que o utilizador está na Temporada 1 quando devia estar na Temporada 2.
-Solução a implementar:
-No seasonChain[], guardar totalEpisodesBefore (soma de todos os episódios das temporadas anteriores).
-Quando o site indicar "Episódio 17" e o seasonChain tiver [S1: 12 eps, S2: 13 eps], calcular: 17 - 12 = Episódio 5 da Temporada 2. Fazer o match para a entrada MAL da S2.
-Quando o utilizador clicar + para atualizar progresso, enviar para o MAL o episódio relativo correto (5), não o absoluto (17).
-Se o número de episódios de uma temporada não estiver disponível no MAL (campo episodes = 0 ou null), usar a API do Jikan (/v4/anime/{id}) para buscar e guardar em cache.
-Criar a função resolveAbsoluteEpisode(absoluteEp, seasonChain) que retorna { malEntry, relativeEpisode, seasonNumber }.

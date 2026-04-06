@@ -4,23 +4,9 @@
  * Live Scan Service
  * @description Responsável por pesquisar ativamente no HTML do site alvo o link exato do episódio/capítulo quando o utilizador clica na notificação.
  */
-export class LiveScanService {
-    /**
-     * Utilitário interno para fetch com timeout rigoroso.
-     */
-    static async fetchWithTimeout(url, timeoutMs = 8000) {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(id);
-            return response;
-        } catch (error) {
-            clearTimeout(id);
-            throw error;
-        }
-    }
+import { NetworkService } from '../../common/network.service.js';
 
+export class LiveScanService {
     static async findExactLink(targetUrl, searchBase, epNumber) {
         try {
             const urlObj = new URL(targetUrl);
@@ -33,7 +19,7 @@ export class LiveScanService {
             console.group(`[Live Scan] Procurando link exato para: ${searchBase} (Alvo: Ep/Cap ${epNumber})`);
             console.log("A aceder ao site base:", targetUrl);
             
-            const res = await this.fetchWithTimeout(targetUrl, 8000);
+            const res = await NetworkService.fetchWithTimeout(targetUrl, {}, 8000);
             const html = await res.text();
             
             const hrefRegex = /href=["']([^"']+)["']/gi;

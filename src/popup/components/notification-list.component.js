@@ -6,7 +6,7 @@ import { LiveScanService } from '../services/live-scan.service.js';
 export class NotificationListComponent {
     static render(logs, listEl, emptyEl, clearBtn, filterValue, currentLang, onUpdateLogs) {
         if (!listEl) return;
-        listEl.innerHTML = "";
+        listEl.innerHTML = ""; // Limpeza segura do contentor raiz
 
         const filteredLogs = filterValue === 'all' ? logs : logs.filter(l => l.siteName === filterValue);
 
@@ -26,28 +26,69 @@ export class NotificationListComponent {
 
         filteredLogs.forEach((log) => {
             const originalIndex = logs.indexOf(log); 
-            const li = document.createElement('li');
             const date = new Date(log.date).toLocaleString();
             const actionUrl = log.url || `https://myanimelist.net/${log.type || 'anime'}/${log.id || ''}`;
-            const siteTag = log.siteName ? `<span class="notif-tag" style="background:var(--bg-main); color:var(--primary-color); padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold; border:1px solid var(--border-color);">${log.siteName}</span>` : '';
             
-            li.innerHTML = `
-                <div class="notif-item" style="position: relative; padding-right: 25px;">
-                    <button class="delete-notif-btn" data-index="${originalIndex}" style="position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;" title="Remover">${closeIconSVG}</button>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 8px; width:100%;">
-                        <span class="notif-text" style="font-size: 13px; font-weight: 700; color: var(--text-main); padding-right: 15px;">${log.text}</span>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div style="display: flex; gap: 6px; align-items: center;">
-                                <span class="notif-date" style="font-size: 10px; color: var(--text-muted);">${date}</span>
-                                ${siteTag}
-                            </div>
-                            <button class="open-notif-btn" data-index="${originalIndex}" data-url="${actionUrl}" style="background-color: #48bb78; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;">${btnOpenText}</button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            // Criação estruturada e segura do DOM (Prevenção de XSS)
+            const li = document.createElement('li');
+            
+            const notifItem = document.createElement('div');
+            notifItem.className = 'notif-item';
+            notifItem.style.cssText = 'position: relative; padding-right: 25px;';
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-notif-btn';
+            deleteBtn.setAttribute('data-index', originalIndex);
+            deleteBtn.style.cssText = 'position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;';
+            deleteBtn.title = 'Remover';
+            deleteBtn.innerHTML = closeIconSVG; // Seguro, string estática SVG
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.style.cssText = 'display: flex; flex-direction: column; gap: 8px; width:100%;';
+            
+            const textSpan = document.createElement('span');
+            textSpan.className = 'notif-text';
+            textSpan.style.cssText = 'font-size: 13px; font-weight: 700; color: var(--text-main); padding-right: 15px;';
+            textSpan.textContent = log.text; // Seguro contra XSS
+            
+            const bottomRow = document.createElement('div');
+            bottomRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+            
+            const infoGroup = document.createElement('div');
+            infoGroup.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+            
+            const dateSpan = document.createElement('span');
+            dateSpan.className = 'notif-date';
+            dateSpan.style.cssText = 'font-size: 10px; color: var(--text-muted);';
+            dateSpan.textContent = date;
+            
+            infoGroup.appendChild(dateSpan);
+            
+            if (log.siteName) {
+                const siteTag = document.createElement('span');
+                siteTag.className = 'notif-tag';
+                siteTag.style.cssText = 'background:var(--bg-main); color:var(--primary-color); padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold; border:1px solid var(--border-color);';
+                siteTag.textContent = log.siteName; // Seguro contra XSS
+                infoGroup.appendChild(siteTag);
+            }
+            
+            const openBtn = document.createElement('button');
+            openBtn.className = 'open-notif-btn';
+            openBtn.setAttribute('data-index', originalIndex);
+            openBtn.setAttribute('data-url', actionUrl);
+            openBtn.style.cssText = 'background-color: #48bb78; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; box-shadow: var(--shadow-sm); transition: transform 0.2s;';
+            openBtn.textContent = btnOpenText;
+            
+            bottomRow.appendChild(infoGroup);
+            bottomRow.appendChild(openBtn);
+            
+            contentDiv.appendChild(textSpan);
+            contentDiv.appendChild(bottomRow);
+            
+            notifItem.appendChild(deleteBtn);
+            notifItem.appendChild(contentDiv);
+            
+            li.appendChild(notifItem);
             listEl.appendChild(li);
         });
 
@@ -73,7 +114,7 @@ export class NotificationListComponent {
                 const log = logs[idx];
                 const targetUrl = button.getAttribute('data-url');
 
-                button.innerText = btnSearchingText;
+                button.textContent = btnSearchingText;
                 button.style.opacity = "0.7";
                 button.style.pointerEvents = "none";
 
@@ -86,7 +127,7 @@ export class NotificationListComponent {
                 }
 
                 window.open(finalUrl, '_blank');
-                button.innerText = btnOpenText;
+                button.textContent = btnOpenText;
                 button.style.opacity = "1";
                 button.style.pointerEvents = "auto";
             });
