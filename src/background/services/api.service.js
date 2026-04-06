@@ -2,84 +2,150 @@
 
 /**
  * API Communication Layer
- * @description Handles fetching data from MyAnimeList and Jikan APIs.
- * Applies SRP by separating full list fetches (for UI) from active list fetches (for background monitoring).
+ * @description Handles fetching data from MyAnimeList and Jikan APIs with strict rate limiting, timeout protection, and automatic OAuth2 token refreshing.
  */
 import { AuthService } from './auth.service.js';
 
+/**
+ * Utility function to execute fetch requests with a strict timeout.
+ * @param {string} url - The target URL.
+ * @param {Object} options - Fetch options.
+ * @param {number} timeoutMs - Timeout in milliseconds (default: 8000ms).
+ * @returns {Promise<Response>}
+ */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error;
+    }
+}
+
+/**
+ * Jikan API Rate Limiter
+ * @description Ensures we do not exceed Jikan's 3 requests/second limit by queueing requests with a 400ms delay.
+ */
+class JikanRateLimiter {
+    static queue = [];
+    static isProcessing = false;
+
+    /**
+     * Enqueues a fetch request to the Jikan API.
+     * @param {string} url - Jikan API endpoint.
+     * @returns {Promise<any>} JSON response data.
+     */
+    static async schedule(url) {
+        return new Promise((resolve, reject) => {
+            this.queue.push({ url, resolve, reject });
+            this.processQueue();
+        });
+    }
+
+    static async processQueue() {
+        if (this.isProcessing || this.queue.length === 0) return;
+        this.isProcessing = true;
+
+        const { url, resolve, reject } = this.queue.shift();
+
+        try {
+            const response = await fetchWithTimeout(url, {}, 8000);
+            if (!response.ok) {
+                if (response.status === 429) {
+                    console.warn("[JikanRateLimiter] 429 Too Many Requests. Backing off.");
+                    this.queue.unshift({ url, resolve, reject }); // Re-queue
+                    await new Promise(r => setTimeout(r, 2000)); // Hard backoff
+                } else {
+                    reject(new Error(`Jikan API Error: ${response.status}`));
+                }
+            } else {
+                const data = await response.json();
+                resolve(data);
+            }
+        } catch (error) {
+            reject(error);
+        } finally {
+            await new Promise(r => setTimeout(r, 400)); // Strict 400ms delay between calls
+            this.isProcessing = false;
+            this.processQueue();
+        }
+    }
+}
+
 export class ActiveItemsSynonymFetcher {
     static async sync(activeItems) {
-        const storageData = await chrome.storage.local.get(['mal_synonyms_cache', 'mal_relations_cache']);
-        const cache = storageData.mal_synonyms_cache || {};
-        const relationsCache = storageData.mal_relations_cache || {};
-        let updated = false;
-
-        for (const item of activeItems) {
-            const normTitle = item.title.toLowerCase();
-            const syncKey = `jikan_sync_v2_${item.type}_${item.id}`;
-            
-            const storageRes = await chrome.storage.local.get(syncKey);
-            if (storageRes[syncKey]) continue;
-
-            try {
-                const url = `https://api.jikan.moe/v4/${item.type}/${item.id}`;
-                const res = await fetch(url);
-                
-                if (!res.ok) {
-                    if (res.status === 429) break; 
-                    continue;
-                }
-                
-                const { data } = await res.json();
-                
-                // Mapear Sinónimos
-                if (data.title_synonyms && Array.isArray(data.title_synonyms)) {
-                    data.title_synonyms.forEach(syn => {
-                        const cleanSyn = syn.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
-                        if (cleanSyn) cache[cleanSyn] = normTitle;
-                    });
-                    updated = true;
-                }
-                
-                if (data.title_english) {
-                    const cleanEng = data.title_english.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
-                    if (cleanEng) cache[cleanEng] = normTitle;
-                    updated = true;
-                }
-
-                // Extrair Relações (Sequels e Prequels) para construir a Season Chain
-                if (data.relations && Array.isArray(data.relations)) {
-                    let prequels = [];
-                    let sequels = [];
-                    
-                    data.relations.forEach(rel => {
-                        if (rel.relation === 'Prequel' && rel.entry) {
-                            prequels.push(...rel.entry.filter(e => e.type === item.type).map(e => e.mal_id));
-                        }
-                        if (rel.relation === 'Sequel' && rel.entry) {
-                            sequels.push(...rel.entry.filter(e => e.type === item.type).map(e => e.mal_id));
-                        }
-                    });
-
-                    relationsCache[item.id] = {
-                        prequels: prequels,
-                        sequels: sequels
-                    };
-                    updated = true;
-                }
-                
-                await chrome.storage.local.set({ [syncKey]: true });
-                await new Promise(resolve => setTimeout(resolve, 1500)); 
-            } catch (error) {
-                console.error("[ActiveItemsSynonymFetcher] Error fetching data:", error);
-            }
-        }
-
-        if (updated) {
-            await chrome.storage.local.set({ 
-                mal_synonyms_cache: cache,
-                mal_relations_cache: relationsCache
+        try {
+            const storageData = await new Promise(resolve => {
+                chrome.storage.local.get(['mal_synonyms_cache', 'mal_relations_cache'], (res) => {
+                    if (chrome.runtime.lastError) console.warn("[Storage] Error:", chrome.runtime.lastError);
+                    resolve(res);
+                });
             });
+
+            const cache = storageData.mal_synonyms_cache || {};
+            const relationsCache = storageData.mal_relations_cache || {};
+            let updated = false;
+
+            for (const item of activeItems) {
+                const normTitle = item.title.toLowerCase();
+                const syncKey = `jikan_sync_v2_${item.type}_${item.id}`;
+                
+                const storageRes = await new Promise(resolve => chrome.storage.local.get(syncKey, resolve));
+                if (storageRes[syncKey]) continue;
+
+                try {
+                    const url = `https://api.jikan.moe/v4/${item.type}/${item.id}`;
+                    const { data } = await JikanRateLimiter.schedule(url); // Using Rate Limiter
+                    
+                    if (data.title_synonyms && Array.isArray(data.title_synonyms)) {
+                        data.title_synonyms.forEach(syn => {
+                            const cleanSyn = syn.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
+                            if (cleanSyn) cache[cleanSyn] = normTitle;
+                        });
+                        updated = true;
+                    }
+                    
+                    if (data.title_english) {
+                        const cleanEng = data.title_english.toLowerCase().replace(/[^a-z0-9\s\-]/g, "").replace(/\s+/g, " ").trim();
+                        if (cleanEng) cache[cleanEng] = normTitle;
+                        updated = true;
+                    }
+
+                    if (data.relations && Array.isArray(data.relations)) {
+                        let prequels = [];
+                        let sequels = [];
+                        
+                        data.relations.forEach(rel => {
+                            if (rel.relation === 'Prequel' && rel.entry) {
+                                prequels.push(...rel.entry.filter(e => e.type === item.type).map(e => e.mal_id));
+                            }
+                            if (rel.relation === 'Sequel' && rel.entry) {
+                                sequels.push(...rel.entry.filter(e => e.type === item.type).map(e => e.mal_id));
+                            }
+                        });
+
+                        relationsCache[item.id] = { prequels, sequels };
+                        updated = true;
+                    }
+                    
+                    chrome.storage.local.set({ [syncKey]: true });
+                } catch (error) {
+                    console.warn(`[ActiveItemsSynonymFetcher] Silent error fetching ${item.id}:`, error);
+                }
+            }
+
+            if (updated) {
+                chrome.storage.local.set({ 
+                    mal_synonyms_cache: cache,
+                    mal_relations_cache: relationsCache
+                });
+            }
+        } catch (globalError) {
+            console.warn("[ActiveItemsSynonymFetcher] Global silent error:", globalError);
         }
     }
 }
@@ -93,7 +159,7 @@ export class MalService {
         while (hasMore && offset < 50000) { 
             const malUrl = `https://myanimelist.net/${listType}/${username}/load.json?status=${status}&offset=${offset}&_t=${Date.now()}`;
             try {
-                const res = await fetch(malUrl);
+                const res = await fetchWithTimeout(malUrl, {}, 8000);
                 if (!res.ok) throw new Error(`MAL API Error: Private or Invalid Profile for ${listType}`);
                 
                 const data = await res.json();
@@ -104,7 +170,7 @@ export class MalService {
                 if (data.length < 300) hasMore = false;
                 else offset += 300;
             } catch (error) {
-                console.error(`[MalService] Error fetching ${listType}:`, error);
+                console.warn(`[MalService] Silent error fetching ${listType}:`, error);
                 hasMore = false; 
             }
         }
@@ -112,18 +178,29 @@ export class MalService {
     }
 
     static normalizeItems(rawList, type) {
-        return rawList.map(item => ({
-            id: type === 'anime' ? item.anime_id : item.manga_id,
-            title: type === 'anime' ? item.anime_title : item.manga_title,
-            title_eng: (type === 'anime' ? item.anime_title_eng || item.anime_english : item.manga_title_eng || item.manga_english) || null,
-            status: item.status,
-            score: item.score,
-            type: type,
-            progress: type === 'anime' ? (item.num_watched_episodes || 0) : (item.num_read_chapters || 0),
-            total: type === 'anime' ? (item.anime_num_episodes || 0) : (item.manga_num_chapters || 0),
-            num_watched_episodes: item.num_watched_episodes || 0,
-            num_read_chapters: item.num_read_chapters || 0
-        }));
+        return rawList.map(item => {
+            // Data Validation Protection
+            const rawEps = type === 'anime' ? item.anime_num_episodes : item.manga_num_chapters;
+            const validTotal = (typeof rawEps === 'number' && rawEps > 0) ? rawEps : 0;
+            
+            const rawProgress = type === 'anime' ? item.num_watched_episodes : item.num_read_chapters;
+            const validProgress = (typeof rawProgress === 'number' && rawProgress > 0) ? rawProgress : 0;
+
+            const validStatus = item.status ? item.status : 6; // Default to Planned if missing
+
+            return {
+                id: type === 'anime' ? item.anime_id : item.manga_id,
+                title: type === 'anime' ? item.anime_title : item.manga_title,
+                title_eng: (type === 'anime' ? item.anime_title_eng || item.anime_english : item.manga_title_eng || item.manga_english) || null,
+                status: validStatus,
+                score: item.score || 0,
+                type: type,
+                progress: validProgress,
+                total: validTotal,
+                num_watched_episodes: type === 'anime' ? validProgress : 0,
+                num_read_chapters: type === 'manga' ? validProgress : 0
+            };
+        });
     }
 
     static async fetchActiveItemsOnly(username) {
@@ -139,11 +216,10 @@ export class MalService {
             ];
 
             ActiveItemsSynonymFetcher.sync(combined);
-
             return combined;
         } catch (error) {
-            console.error("[MalService] Error fetching active items:", error);
-            throw error;
+            console.warn("[MalService] Silent error fetching active items:", error);
+            return [];
         }
     }
 
@@ -164,24 +240,42 @@ export class MalService {
 
             return combined;
         } catch (error) {
-            console.error("[MalService] Error combining lists:", error);
+            console.warn("[MalService] Silent error combining lists:", error);
             throw error;
         }
     }
 
-    static async updateListEntry(id, type, params) {
+    static async updateListEntry(id, type, params, isRetry = false) {
         try {
             const token = await AuthService.getAccessToken();
             const url = `https://api.myanimelist.net/v2/${type}/${id}/my_list_status`;
             
-            let response = await fetch(url, {
+            let response = await fetchWithTimeout(url, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams(params)
-            });
+            }, 8000);
+
+            // Automatic Token Refresh Fallback
+            if (response.status === 401 && !isRetry) {
+                console.warn("[MalService] 401 Unauthorized. Attempting automatic token refresh...");
+                await new Promise(resolve => {
+                    chrome.storage.local.get(['mal_refresh_token'], async (res) => {
+                        if (res.mal_refresh_token) {
+                            try {
+                                await AuthService.refreshAccessToken(res.mal_refresh_token);
+                                resolve();
+                            } catch(e) { resolve(); }
+                        } else {
+                            resolve();
+                        }
+                    });
+                });
+                return this.updateListEntry(id, type, params, true);
+            }
 
             if (!response.ok) {
                 const status = response.status;
@@ -189,28 +283,28 @@ export class MalService {
                 try { errorData = await response.json(); } catch(e) {}
                 
                 if (status === 400 && (params.num_watched_episodes || params.num_chapters_read)) {
-                    console.warn("[MAL Highlighter] Numeração excede limite do MAL. A forçar conclusão da temporada.");
+                    console.warn("[MAL Highlighter] Cap limit exceeded. Forcing completion status.");
                     delete params.num_watched_episodes;
                     delete params.num_chapters_read;
                     params.status = 2; 
                     
-                    response = await fetch(url, {
+                    response = await fetchWithTimeout(url, {
                         method: 'PATCH',
                         headers: {
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/x-www-form-urlencoded'
                         },
                         body: new URLSearchParams(params)
-                    });
+                    }, 8000);
                     
-                    if (!response.ok) throw new Error('Falha no Fallback de segurança do MAL');
+                    if (!response.ok) throw new Error('MAL API Safety Fallback Failed');
                 } else {
-                    throw new Error(`MAL API Rejeitou a atualização: ${errorData?.message || status}`);
+                    throw new Error(`MAL API Rejected: ${errorData?.message || status}`);
                 }
             }
             return await response.json();
         } catch (error) {
-            console.error("[MalService] Error updating entry:", error);
+            console.warn("[MalService] Silent error updating entry:", error);
             throw error;
         }
     }

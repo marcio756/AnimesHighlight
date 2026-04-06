@@ -1,3 +1,5 @@
+// src/background/services/monitor.service.js
+
 /**
  * Background Monitoring Layer
  * @description Manages alarms, multi-site background scraping, and notification generation using synonym dictionaries.
@@ -12,26 +14,52 @@ export const MONITOR_CONFIG = {
     HISTORY_LIMIT: 100
 };
 
+/**
+ * Utilitário interno para proteger leituras e escritas no storage.
+ */
+class SafeStorage {
+    static async get(keys) {
+        return new Promise(resolve => {
+            chrome.storage.local.get(keys, res => {
+                if (chrome.runtime.lastError) console.warn("[SafeStorage Monitor] Read Error:", chrome.runtime.lastError);
+                resolve(res || {});
+            });
+        });
+    }
+    static async set(data) {
+        return new Promise(resolve => {
+            chrome.storage.local.set(data, () => {
+                if (chrome.runtime.lastError) console.warn("[SafeStorage Monitor] Write Error:", chrome.runtime.lastError);
+                resolve();
+            });
+        });
+    }
+}
+
 export class ReleaseMonitorService {
     static async setupAlarm() {
-        const store = await chrome.storage.local.get('monitoredSites');
-        const sites = store.monitoredSites || [];
-        const hasActiveSites = sites.some(site => site.enabled);
+        try {
+            const store = await SafeStorage.get('monitoredSites');
+            const sites = store.monitoredSites || [];
+            const hasActiveSites = sites.some(site => site.enabled);
 
-        await chrome.alarms.clear(MONITOR_CONFIG.ALARM_NAME);
+            await chrome.alarms.clear(MONITOR_CONFIG.ALARM_NAME);
 
-        if (hasActiveSites) {
-            chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { 
-                delayInMinutes: 1, 
-                periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN 
-            });
+            if (hasActiveSites) {
+                chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { 
+                    delayInMinutes: 1, 
+                    periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN 
+                });
+            }
+        } catch (error) {
+            console.warn("[Monitor] Silent error setting up alarm:", error);
         }
     }
 
     static async checkNewReleases() {
-        await chrome.storage.local.set({ lastMonitorCheck: Date.now() });
+        await SafeStorage.set({ lastMonitorCheck: Date.now() });
 
-        const store = await chrome.storage.local.get(['malUsername', 'monitoredSites', 'seenEpisodes', 'mal_synonyms_cache', 'notificationLog']);
+        const store = await SafeStorage.get(['malUsername', 'monitoredSites', 'seenEpisodes', 'mal_synonyms_cache', 'notificationLog']);
         const username = store.malUsername;
         const sites = store.monitoredSites || [];
         const activeSites = sites.filter(site => site.enabled);
@@ -115,10 +143,10 @@ export class ReleaseMonitorService {
             }
 
             if (stateChanged) {
-                await chrome.storage.local.set({ seenEpisodes });
+                await SafeStorage.set({ seenEpisodes });
             }
         } catch (error) {
-            console.error("[Monitor] Multi-Site Verification failed:", error);
+            console.warn("[Monitor] Multi-Site Verification failed silently:", error);
         }
     }
 
@@ -137,12 +165,15 @@ export class ReleaseMonitorService {
 
     static async fetchSiteContent(url) {
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 15000);
+        const id = setTimeout(() => controller.abort(), 8000); // Strict 8s limit
         try {
             const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
             clearTimeout(id);
             return await response.text();
-        } catch (e) { return ""; }
+        } catch (e) { 
+            console.warn(`[Monitor] Fetch timeout or error for ${url}`);
+            return ""; 
+        }
     }
 
     static detectRelease(html, title, progressNumber, fallbackUrl) {
@@ -228,67 +259,75 @@ export class ReleaseMonitorService {
     }
 
     static async sendNotification(items) {
-        const lang = await I18nService.getCurrentLang();
-        
-        const badgeStore = await chrome.storage.local.get('unreadCount');
-        let currentUnread = (badgeStore.unreadCount || 0) + items.length;
-        await chrome.storage.local.set({ unreadCount: currentUnread });
-        chrome.action.setBadgeText({ text: currentUnread.toString() });
-        chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); 
-        
-        const storageRes = await chrome.storage.local.get(['notificationMeta']);
-        let notificationMeta = storageRes.notificationMeta || {};
-
-        for (const item of items) {
-            const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
+        try {
+            const lang = await I18nService.getCurrentLang();
             
-            const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
-            const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
+            const badgeStore = await SafeStorage.get('unreadCount');
+            let currentUnread = (badgeStore.unreadCount || 0) + items.length;
+            await SafeStorage.set({ unreadCount: currentUnread });
+            chrome.action.setBadgeText({ text: currentUnread.toString() });
+            chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); 
             
-            chrome.notifications.create(notifId, {
-                type: 'basic', 
-                iconUrl: '/icon.png', 
-                title: I18nService.get('notifNew', lang),
-                message: message, 
-                priority: 2,
-                buttons: [
-                    { title: I18nService.get('notifBtnWatch', lang) },
-                    { title: I18nService.get('notifBtnMarkSeen', lang) }
-                ]
-            });
+            const storageRes = await SafeStorage.get(['notificationMeta']);
+            let notificationMeta = storageRes.notificationMeta || {};
 
-            notificationMeta[notifId] = { ...item, monitorUrl: item.siteUrl };
+            for (const item of items) {
+                const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
+                
+                const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
+                const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
+                
+                chrome.notifications.create(notifId, {
+                    type: 'basic', 
+                    iconUrl: '/icon.png', 
+                    title: I18nService.get('notifNew', lang),
+                    message: message, 
+                    priority: 2,
+                    buttons: [
+                        { title: I18nService.get('notifBtnWatch', lang) },
+                        { title: I18nService.get('notifBtnMarkSeen', lang) }
+                    ]
+                });
+
+                notificationMeta[notifId] = { ...item, monitorUrl: item.siteUrl };
+            }
+
+            const keys = Object.keys(notificationMeta);
+            if (keys.length > 50) delete notificationMeta[keys[0]];
+            await SafeStorage.set({ notificationMeta });
+
+            await this.saveToHistory(items, lang);
+        } catch (error) {
+            console.warn("[Monitor] Silent error in sendNotification:", error);
         }
-
-        const keys = Object.keys(notificationMeta);
-        if (keys.length > 50) delete notificationMeta[keys[0]];
-        await chrome.storage.local.set({ notificationMeta });
-
-        await this.saveToHistory(items, lang);
     }
 
     static async saveToHistory(items, lang) {
-        const timestamp = Date.now();
-        const newEntries = items.map(item => {
-            const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
-            return { 
-                text: `${item.title} - ${prefix} ${item.nextEp}`, 
-                url: item.siteUrl || item.url,
-                siteName: item.siteName || 'Unknown Site',
-                id: item.id,
-                type: item.type,
-                ep: item.nextEp,
-                date: timestamp, 
-                read: false 
-            };
-        });
+        try {
+            const timestamp = Date.now();
+            const newEntries = items.map(item => {
+                const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
+                return { 
+                    text: `${item.title} - ${prefix} ${item.nextEp}`, 
+                    url: item.siteUrl || item.url,
+                    siteName: item.siteName || 'Unknown Site',
+                    id: item.id,
+                    type: item.type,
+                    ep: item.nextEp,
+                    date: timestamp, 
+                    read: false 
+                };
+            });
 
-        const data = await chrome.storage.local.get('notificationLog');
-        let logs = data.notificationLog || [];
+            const data = await SafeStorage.get('notificationLog');
+            let logs = data.notificationLog || [];
 
-        logs.unshift(...newEntries);
-        if (logs.length > MONITOR_CONFIG.HISTORY_LIMIT) logs = logs.slice(0, MONITOR_CONFIG.HISTORY_LIMIT);
+            logs.unshift(...newEntries);
+            if (logs.length > MONITOR_CONFIG.HISTORY_LIMIT) logs = logs.slice(0, MONITOR_CONFIG.HISTORY_LIMIT);
 
-        await chrome.storage.local.set({ notificationLog: logs });
+            await SafeStorage.set({ notificationLog: logs });
+        } catch (error) {
+            console.warn("[Monitor] Silent error saving to history:", error);
+        }
     }
 }

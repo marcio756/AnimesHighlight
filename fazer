@@ -1,12 +1,3 @@
-PROBLEMA 1 — Deteção de Temporadas por Número - FEITO
-Atualmente, quando um site mostra "Shingeki no Kyojin 4" ou "Attack on Titan Season 4" ou "SnK S4", o matcher falha porque o nome no MAL é "Shingeki no Kyojin: The Final Season". O sistema precisa de:
-Extrair qualquer indicador de temporada do título do site: números arábicos soltos (4), ordinais (4th), romanos (IV), prefixos (S4, S04, Season 4, Temporada 4, Part 4, Cour 4, T4).
-Mapear esse número de temporada para a entrada correta no MAL, usando a ordem cronológica das entradas da franchise no MAL (campo related → Prequel/Sequel).
-Construir um seasonChain[] para cada anime da lista do utilizador que percorre a cadeia de Sequels e guarda: { malId, title, synonyms, seasonNumber, totalEpisodesBefore }.
-Se o título do site bater com qualquer entrada do seasonChain[] E o número de temporada coincidir, é um match válido — mesmo que o nome seja completamente diferente.
-Normalizar os títulos antes de comparar: remover acentos, lowercase, remover pontuação, converter romanos para arábicos, remover palavras como "the final", "part", "cour", "arc", "chapter", "fhd", "hd", "dublado", "legendado", "online".
-
-
 PROBLEMA 2 — Episódios Contínuos Entre Temporadas ("Episode Offset")
 Muitos sites usam numeração contínua de episódios. Por exemplo: a Temporada 1 tem 12 episódios e a Temporada 2 começa no episódio 13 no site, mas o MAL trata cada temporada como episódio 1. A extensão atualmente mostra que o utilizador está na Temporada 1 quando devia estar na Temporada 2.
 Solução a implementar:
@@ -15,21 +6,3 @@ Quando o site indicar "Episódio 17" e o seasonChain tiver [S1: 12 eps, S2: 13 e
 Quando o utilizador clicar + para atualizar progresso, enviar para o MAL o episódio relativo correto (5), não o absoluto (17).
 Se o número de episódios de uma temporada não estiver disponível no MAL (campo episodes = 0 ou null), usar a API do Jikan (/v4/anime/{id}) para buscar e guardar em cache.
 Criar a função resolveAbsoluteEpisode(absoluteEp, seasonChain) que retorna { malEntry, relativeEpisode, seasonNumber }.
-
-
-PROBLEMA 3 — Extensão À Prova de Bala
-Aplica as seguintes proteções em todos os ficheiros relevantes:
-Try/catch em toda a lógica de matching e scraping. Qualquer erro deve ser silencioso para o utilizador (apenas console.warn interno).
-Timeouts em todos os fetch. Usar AbortController com timeout de 8 segundos em todas as chamadas à API do MAL e do Jikan.
-Rate Limiting no Jikan. Implementar uma fila de pedidos com delay de 400ms entre chamadas para não exceder o limite de 3 req/s do Jikan.
-Cache persistente de seasonChain. Guardar o seasonChain calculado no chrome.storage.local com chave seasonChain_{malId} e TTL de 24h. Nunca recalcular se já existir e não estiver expirado.
-Fallback de matching em 3 camadas:
-Match exato normalizado.
-Match fuzzy (75% de palavras em comum).
-Match por sinónimos do Jikan.
-Match por seasonChain (franchise traversal).
-Se nenhuma camada bater, retornar null sem crash.
-Validação de dados do MAL. Antes de qualquer entry.episodes, verificar se é número válido e > 0. Antes de qualquer entry.my_list_status, verificar se existe.
-Proteção ao DOMObserver. Se um site tiver mais de 300 elementos para processar de uma vez, partir em lotes de 50 com setTimeout de 100ms entre lotes para não congelar o browser.
-Token Refresh automático. Se qualquer chamada à API do MAL retornar 401 Unauthorized, tentar refresh do token OAuth2 automaticamente antes de mostrar erro ao utilizador.
-Erros de chrome.storage. Envolver todas as leituras/escritas em chrome.storage com verificação de chrome.runtime.lastError.
