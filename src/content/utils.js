@@ -276,10 +276,14 @@ export class Matcher {
         const baseMal = malTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
 
         let isTextMatch = false;
+        let isPrefixMatch = false;
 
         if (malTitle.includes(siteTitle) || siteTitle.includes(malTitle)) {
             if (Math.abs(malTitle.length - siteTitle.length) <= 4) isTextMatch = true;
-            if (siteTitle.length >= 12 && malTitle.startsWith(siteTitle)) isTextMatch = true;
+            if (siteTitle.length >= 12 && malTitle.startsWith(siteTitle)) {
+                isTextMatch = true;
+                isPrefixMatch = true;
+            }
         }
 
         if (!isTextMatch) {
@@ -299,6 +303,7 @@ export class Matcher {
 
                 if (tokensSite.length >= 5 && matches >= tokensSite.length - 1) {
                     isTextMatch = true;
+                    if (malTitle.length > siteTitle.length) isPrefixMatch = true;
                 } else {
                     const allTokens = new Set([...tokensSite, ...tokensMal]);
                     const ratio = matches / (allTokens.size === 0 ? 1 : allTokens.size);
@@ -332,7 +337,10 @@ export class Matcher {
                 return num >= 2 && num <= 99; 
             };
             
-            if (siteUniques.some(isSeasonIndicator) || malUniques.some(isSeasonIndicator)) {
+            // Correção de Conflito de Temporadas em Prefixo
+            // Se o siteTitle é um prefixo truncado do MAL (ex: omite arcos/subtítulos como 2-nensei-hen),
+            // então os números extra (malUniques) não representam uma quebra de validação lógica de temporada.
+            if (siteUniques.some(isSeasonIndicator) || (!isPrefixMatch && malUniques.some(isSeasonIndicator))) {
                 return false; 
             }
         }
