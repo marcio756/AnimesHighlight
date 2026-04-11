@@ -146,12 +146,13 @@ export class PanelComponent {
         titleEl.innerText = itemName;
         
         const mediaType = data?.type || ContextAnalyzer.guessContentType();
-        const watchingLabel = mediaType === 'manga' ? 'statusReading' : 'statusWatching';
+        const isManga = mediaType === 'manga';
+        const watchingLabel = isManga ? 'statusReading' : 'statusWatching';
 
         statusWrapper.style.opacity = '1';
         statusWrapper.style.pointerEvents = 'auto';
 
-        const isManga = mediaType === 'manga';
+        // Mapeamento unificado: Suporta tanto IDs numéricos (cache) como strings (API)
         const statusMap = { 
             1: isManga ? 'reading' : 'watching', 
             2: 'completed', 
@@ -160,7 +161,11 @@ export class PanelComponent {
             6: isManga ? 'plan_to_read' : 'plan_to_watch' 
         };
 
-        const currentStatusStr = data?.status ? statusMap[data.status] : null;
+        let currentStatusStr = null;
+        if (data?.status) {
+            // Se já for string (vinda da API Search), usamos direto. Se for número, mapeamos.
+            currentStatusStr = isNaN(data.status) ? data.status : statusMap[data.status];
+        }
 
         statusOptions.innerHTML = `
             ${!data?.status ? `<div class="mal-option disabled">${I18nService.get('statusAddToList', config.language)}</div>` : ''}
@@ -214,6 +219,7 @@ export class PanelComponent {
             };
         });
 
+        // Setup do Score (Classificação) - Corrigido para carregar sempre que houver status
         if (data && data.status) {
             scoreWrapper.style.display = 'block';
             const currentScore = data.score || 0;
@@ -262,7 +268,7 @@ export class PanelComponent {
             scoreWrapper.style.display = 'none';
         }
 
-        let field = mediaType === 'manga' ? 'num_chapters_read' : 'num_watched_episodes';
+        let field = isManga ? 'num_chapters_read' : 'num_watched_episodes';
 
         const commitProgressUpdate = (finalVal) => {
             const currentInputEl = document.getElementById('malProgressInput');
@@ -319,7 +325,7 @@ export class PanelComponent {
         if (data && data.status) {
             if (data.progress === undefined) data.progress = 0;
             
-            const prefixStr = mediaType === 'manga' ? I18nService.get('prefixCh', config.language) + ':' : I18nService.get('prefixEp', config.language) + ':';
+            const prefixStr = isManga ? I18nService.get('prefixCh', config.language) + ':' : I18nService.get('prefixEp', config.language) + ':';
             const maxVal = data.total > 0 ? data.total : null;
             
             prefixEl.innerText = prefixStr;
@@ -372,7 +378,7 @@ export class PanelComponent {
                                         action: "UPDATE_PROGRESS",
                                         id: resolved.resolvedId,
                                         mediaType: mediaType,
-                                        data: { [field]: resolved.resolvedProgress, status: 1 }
+                                        data: { [field]: resolved.resolvedProgress, status: isManga ? 'reading' : 'watching' }
                                     }, () => {
                                         const newData = {
                                             id: resolved.resolvedId,

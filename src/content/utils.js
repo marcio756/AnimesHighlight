@@ -163,8 +163,10 @@ export class PerformanceGuard {
 export class ContextAnalyzer {
     static guessContentType() {
         const url = window.location.href.toLowerCase();
-        const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon', 'ler', 'capitulo'];
-        const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'assistir', 'season', 'ova'];
+        // Palavras-chave de Manga priorizadas
+        const urlMangaKw = ['manga', 'manhwa', 'manhua', 'scan', 'webtoon', 'ler', 'capitulo', 'chapter', 'ch', 'comic'];
+        const urlAnimeKw = ['anime', 'episode', 'episodio', 'ep', 'watch', 'assistir', 'season', 'ova', 'stream'];
+        
         const urlTokens = url.replace(/[^a-z0-9]/g, ' ').split(' ');
         
         for (let kw of urlMangaKw) if (urlTokens.includes(kw) || url.includes(`/${kw}/`)) return 'manga';
@@ -174,8 +176,8 @@ export class ContextAnalyzer {
         const isHomePage = path === '/' || path.length < 3;
         const bodyText = document.body.innerText.toLowerCase();
         
-        const chapterCount = (bodyText.match(/\b(chapter|capitulo|capítulo|scan|read|ler|manhwa|manhua)\b/g) || []).length;
-        const episodeCount = (bodyText.match(/\b(episode|episodio|episódio|ep|watch|assistir|temporada|stream)\b/g) || []).length;
+        const chapterCount = (bodyText.match(/\b(chapter|capitulo|capítulo|cap|ch|scan|read|ler|manhwa|manhua|comic|webtoon)\b/g) || []).length;
+        const episodeCount = (bodyText.match(/\b(episode|episodio|episódio|ep|watch|assistir|temporada|stream|season|ova)\b/g) || []).length;
 
         if (isHomePage) {
             if (chapterCount > episodeCount) return 'manga';
@@ -189,15 +191,15 @@ export class ContextAnalyzer {
         let pageAnimeScore = episodeCount;
         
         urlMangaKw.forEach(kw => {
-            if (title.includes(kw)) pageMangaScore += 10;
-            if (metaDesc.includes(kw)) pageMangaScore += 10;
+            if (title.includes(kw)) pageMangaScore += 15;
+            if (metaDesc.includes(kw)) pageMangaScore += 15;
         });
         urlAnimeKw.forEach(kw => {
-            if (title.includes(kw)) pageAnimeScore += 10;
-            if (metaDesc.includes(kw)) pageAnimeScore += 10;
+            if (title.includes(kw)) pageAnimeScore += 15;
+            if (metaDesc.includes(kw)) pageAnimeScore += 15;
         });
 
-        return (pageMangaScore > pageAnimeScore) ? 'manga' : 'anime';
+        return (pageMangaScore >= pageAnimeScore) ? 'manga' : 'anime';
     }
 
     static isListingPage() {
@@ -337,9 +339,6 @@ export class Matcher {
                 return num >= 2 && num <= 99; 
             };
             
-            // Correção de Conflito de Temporadas em Prefixo
-            // Se o siteTitle é um prefixo truncado do MAL (ex: omite arcos/subtítulos como 2-nensei-hen),
-            // então os números extra (malUniques) não representam uma quebra de validação lógica de temporada.
             if (siteUniques.some(isSeasonIndicator) || (!isPrefixMatch && malUniques.some(isSeasonIndicator))) {
                 return false; 
             }

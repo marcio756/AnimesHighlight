@@ -177,8 +177,9 @@ export class MalService {
                 type: type,
                 progress: validProgress,
                 total: validTotal,
-                num_watched_episodes: type === 'anime' ? validProgress : 0,
-                num_read_chapters: type === 'manga' ? validProgress : 0
+                // Garantir que os campos específicos existem para o painel
+                num_watched_episodes: validProgress,
+                num_read_chapters: validProgress
             };
         });
     }
