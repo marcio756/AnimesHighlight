@@ -62,8 +62,10 @@ export class SearchService {
                             if (apiItem.type !== currentMediaType) continue;
                             const apiTitleNorm = TextNormalizer.normalize(apiItem.title);
                             const apiTitleEngNorm = apiItem.title_english ? TextNormalizer.normalize(apiItem.title_english) : "";
+                            const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
+                                ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn))) : false;
                             
-                            if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm))) {
+                            if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) || hasSynonymMatch) {
                                 bestMatch = apiItem;
                                 finalType = apiItem.type;
                                 break;

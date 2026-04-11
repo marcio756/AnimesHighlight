@@ -151,16 +151,24 @@ export class PanelComponent {
         statusWrapper.style.opacity = '1';
         statusWrapper.style.pointerEvents = 'auto';
 
-        const statusMap = { 1: 'watching', 2: 'completed', 3: 'on_hold', 4: 'dropped', 6: 'plan_to_watch' };
+        const isManga = mediaType === 'manga';
+        const statusMap = { 
+            1: isManga ? 'reading' : 'watching', 
+            2: 'completed', 
+            3: 'on_hold', 
+            4: 'dropped', 
+            6: isManga ? 'plan_to_read' : 'plan_to_watch' 
+        };
+
         const currentStatusStr = data?.status ? statusMap[data.status] : null;
 
         statusOptions.innerHTML = `
             ${!data?.status ? `<div class="mal-option disabled">${I18nService.get('statusAddToList', config.language)}</div>` : ''}
-            <div class="mal-option ${currentStatusStr === 'watching' ? 'selected' : ''}" data-value="watching">${I18nService.get(watchingLabel, config.language)}</div>
-            <div class="mal-option ${currentStatusStr === 'completed' ? 'selected' : ''}" data-value="completed">${I18nService.get('statusCompleted', config.language)}</div>
-            <div class="mal-option ${currentStatusStr === 'on_hold' ? 'selected' : ''}" data-value="on_hold">${I18nService.get('statusOnHold', config.language)}</div>
-            <div class="mal-option ${currentStatusStr === 'dropped' ? 'selected' : ''}" data-value="dropped">${I18nService.get('statusDropped', config.language)}</div>
-            <div class="mal-option ${currentStatusStr === 'plan_to_watch' ? 'selected' : ''}" data-value="plan_to_watch">${I18nService.get('statusPlanned', config.language)}</div>
+            <div class="mal-option ${currentStatusStr === statusMap[1] ? 'selected' : ''}" data-value="${statusMap[1]}">${I18nService.get(watchingLabel, config.language)}</div>
+            <div class="mal-option ${currentStatusStr === statusMap[2] ? 'selected' : ''}" data-value="${statusMap[2]}">${I18nService.get('statusCompleted', config.language)}</div>
+            <div class="mal-option ${currentStatusStr === statusMap[3] ? 'selected' : ''}" data-value="${statusMap[3]}">${I18nService.get('statusOnHold', config.language)}</div>
+            <div class="mal-option ${currentStatusStr === statusMap[4] ? 'selected' : ''}" data-value="${statusMap[4]}">${I18nService.get('statusDropped', config.language)}</div>
+            <div class="mal-option ${currentStatusStr === statusMap[6] ? 'selected' : ''}" data-value="${statusMap[6]}">${I18nService.get('statusPlanned', config.language)}</div>
         `;
 
         if (currentStatusStr) {
@@ -193,7 +201,6 @@ export class PanelComponent {
                         const statusId = parseInt(Object.keys(statusMap).find(key => statusMap[key] === newStatusStr));
                         DataManager.updateCacheItem(data.id, mediaType, { status: statusId });
                         
-                        // DISPARAR EVENTO DE ATUALIZAÇÃO PARA O RESTO DA PÁGINA
                         window.dispatchEvent(new CustomEvent('mal_entry_updated', {
                             detail: { id: data.id, type: mediaType, status: statusId }
                         }));
@@ -207,7 +214,6 @@ export class PanelComponent {
             };
         });
 
-        // Setup do Score (Classificação)
         if (data && data.status) {
             scoreWrapper.style.display = 'block';
             const currentScore = data.score || 0;
@@ -300,7 +306,6 @@ export class PanelComponent {
                 if (response && response.success) {
                     DataManager.updateCacheItem(data.id, mediaType, { progress: finalVal });
                     
-                    // DISPARAR EVENTO DE ATUALIZAÇÃO PARA O RESTO DA PÁGINA
                     window.dispatchEvent(new CustomEvent('mal_entry_updated', {
                         detail: { id: data.id, type: mediaType, progress: finalVal }
                     }));

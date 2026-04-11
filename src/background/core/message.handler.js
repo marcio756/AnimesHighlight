@@ -36,8 +36,8 @@ export class MessageHandler {
             if (request.action === "SEARCH_ITEM") {
                 const query = encodeURIComponent(request.title);
                 Promise.all([
-                    fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=3`).then(res => res.json()).catch(() => ({ data: [] })),
-                    fetch(`https://api.jikan.moe/v4/manga?q=${query}&limit=3`).then(res => res.json()).catch(() => ({ data: [] }))
+                    fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=5`).then(res => res.json()).catch(() => ({ data: [] })),
+                    fetch(`https://api.jikan.moe/v4/manga?q=${query}&limit=5`).then(res => res.json()).catch(() => ({ data: [] }))
                 ])
                 .then(([animeRes, mangaRes]) => {
                     const results = [];

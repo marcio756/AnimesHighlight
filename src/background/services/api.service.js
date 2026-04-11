@@ -272,7 +272,7 @@ export class MalService {
                     console.warn("[MAL Highlighter] Cap limit exceeded. Forcing completion status.");
                     delete params.num_watched_episodes;
                     delete params.num_chapters_read;
-                    params.status = 2; 
+                    params.status = 'completed'; 
                     
                     response = await NetworkService.fetchWithTimeout(url, {
                         method: 'PATCH',
