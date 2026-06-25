@@ -12,6 +12,11 @@ export const CONFIG = {
         'anime', 'manga', 'donghua', 'episodio', 'episode', 'season', 
         'temporada', 'assistir', 'online', 'legendado', 'dublado', 'stream',
         'ler', 'capitulo', 'chapter', 'manhwa', 'comic', 'scan', 'webtoon'
+    ],
+    BLOCKED_DOMAINS: [
+        'youtube.com', 'youtu.be', 'google.', 'facebook.com', 'twitter.com', 'x.com',
+        'instagram.com', 'tiktok.com', 'twitch.tv', 'netflix.com', 'amazon.', 
+        'reddit.com', 'myanimelist.net', 'wikipedia.org', 'yahoo.', 'bing.com'
     ]
 };
 
@@ -22,7 +27,9 @@ export const UI_BLOCKLIST = [
     "login", "registrar", "assistir", "online", "download", 
     "todos os direitos", "copyright", "proximo episodio",
     "episodio anterior", "lista de", "generos", "contato",
-    "filmes", "animes", "donghuas", "calendario", "mangas"
+    "filmes", "animes", "donghuas", "calendario", "mangas",
+    "history", "historico", "playlist", "channel", "canal",
+    "shorts", "feed", "live", "streams", "inicio", "home"
 ];
 
 export const STATUS_MAP = {
@@ -146,7 +153,12 @@ export class DynamicDebouncer {
 export class PerformanceGuard {
     static isRelevantPage() {
         const url = window.location.href.toLowerCase();
-        if (url.includes('myanimelist')) return false; 
+        
+        // Bloqueio explícito de plataformas de conteúdo massivo não relacionadas para poupar CPU
+        if (CONFIG.BLOCKED_DOMAINS.some(domain => url.includes(domain))) {
+            console.log("[MAL Highlighter] Script idle: Generic or blocked domain detected.");
+            return false;
+        }
 
         const title = document.title.toLowerCase();
         const metaDesc = document.querySelector('meta[name="description"]')?.content.toLowerCase() || "";
@@ -255,7 +267,7 @@ export class TextNormalizer {
         const segments = path.split('/').filter(p => p.length > 0);
         if (segments.length === 0) return null;
         
-        const generics = ['anime', 'animes', 'manga', 'mangas', 'watch', 'read', 'ler', 'assistir', 'serie', 'series', 'tv', 'movie', 'filme', 'ova', 'category', 'genre'];
+        const generics = ['anime', 'animes', 'manga', 'mangas', 'watch', 'read', 'ler', 'assistir', 'serie', 'series', 'tv', 'movie', 'filme', 'ova', 'category', 'genre', 'history', 'feed', 'playlist', 'channel', 'user', 'shorts', 'c', 'v', 'live'];
 
         for (let i = segments.length - 1; i >= 0; i--) {
             const seg = segments[i].toLowerCase();
