@@ -1,7 +1,7 @@
 // src/content/services/matcher.service.js
 
 import { TextNormalizer, Matcher, SeasonExtractor } from '../utils.js';
-import { SynonymDictionary, RelationDictionary } from '../data.js';
+import { SynonymDictionary, RelationDictionary, ManualMappingManager } from '../data.js';
 
 /**
  * Advanced Matching Service
@@ -13,7 +13,47 @@ export class MatcherService {
         this.globalMediaMap = globalMediaMap;
         this.relations = RelationDictionary.getRelations();
         this.seasonChains = new Map();
+        this.fuzzyCache = new Map();
+        this.buildIndexes();
         this.initSeasonChains();
+    }
+
+    /**
+     * Pre-computes lookup structures so per-element matching does not rescan / re-normalize the whole list.
+     */
+    buildIndexes() {
+        this.idToTitle = new Map();
+        this.entries = [];
+        for (const [malTitle, dataArray] of this.globalMediaMap.entries()) {
+            const engTitles = dataArray
+                .map(node => node.title_eng ? TextNormalizer.normalize(node.title_eng) : null)
+                .filter(Boolean);
+            this.entries.push({ malTitle, dataArray, engTitles });
+            dataArray.forEach(d => this.idToTitle.set(`${d.type}:${d.id}`, malTitle));
+        }
+    }
+
+    /**
+     * Fuzzy lookup across the list. Returns the first entry of the requested type
+     * (entries of the wrong type no longer shadow a valid later match). Results are memoized.
+     */
+    fuzzyFind(itemTitle, currentMediaType) {
+        const cacheKey = `${currentMediaType}|${itemTitle}`;
+        if (this.fuzzyCache.has(cacheKey)) return this.fuzzyCache.get(cacheKey);
+
+        let found = null;
+        if (itemTitle.length < 150) {
+            for (const { malTitle, dataArray, engTitles } of this.entries) {
+                const typed = dataArray.find(m => m.type === currentMediaType);
+                if (!typed) continue;
+                if (Matcher.isFuzzyMatch(itemTitle, malTitle) || engTitles.some(t => Matcher.isFuzzyMatch(itemTitle, t))) {
+                    found = typed;
+                    break;
+                }
+            }
+        }
+        this.fuzzyCache.set(cacheKey, found);
+        return found;
     }
 
     /**
@@ -81,13 +121,8 @@ export class MatcherService {
                 dataArray.forEach(item => {
                     const rootId = findRootId(item.id);
                     
-                    let rootTitle = malTitle;
-                    for (let [t, dArray] of this.globalMediaMap.entries()) {
-                        if (dArray.some(d => d.id === rootId)) {
-                            rootTitle = SeasonExtractor.getBaseTitle(t);
-                            break;
-                        }
-                    }
+                    const rootMalTitle = this.idToTitle.get(`${item.type}:${rootId}`);
+                    const rootTitle = rootMalTitle ? SeasonExtractor.getBaseTitle(rootMalTitle) : malTitle;
 
                     let depth = 1;
                     let currentId = rootId;
@@ -128,12 +163,27 @@ export class MatcherService {
     }
 
     /**
+     * Resolves a user-defined mapping against the user's list.
+     * @returns {Object|null} The list entry, or null if unmapped / not in the list.
+     */
+    findManual(normTitle, currentMediaType) {
+        const mapped = ManualMappingManager.get(normTitle);
+        if (!mapped || mapped.type !== currentMediaType) return null;
+        const malTitle = this.idToTitle.get(`${mapped.type}:${mapped.id}`);
+        const dataArray = malTitle ? this.globalMediaMap.get(malTitle) : null;
+        return dataArray ? dataArray.find(d => d.id === mapped.id && d.type === mapped.type) || null : null;
+    }
+
+    /**
      * Executes the 4-layer matching strategy securely.
      */
     findMatch(rawText, currentMediaType) {
         try {
             const itemTitleRaw = TextNormalizer.normalize(rawText);
             if (!itemTitleRaw || itemTitleRaw.length < 3) return null;
+
+            const manual = this.findManual(itemTitleRaw, currentMediaType);
+            if (manual) return manual;
 
             // Layer 3: Jikan Synonyms resolution (Resolves to normalized official title)
             const itemTitle = SynonymDictionary.resolve(itemTitleRaw);
@@ -146,29 +196,8 @@ export class MatcherService {
             }
 
             // Layer 2: Fuzzy Match
-            let fuzzyMatchArray = null;
-            if (itemTitle.length < 150) {
-                for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
-                    if (Matcher.isFuzzyMatch(itemTitle, malTitle)) {
-                        fuzzyMatchArray = dataArray;
-                        break;
-                    }
-                    
-                    const hasAlternativeMatch = dataArray.some(node => {
-                        return node.title_eng && Matcher.isFuzzyMatch(itemTitle, TextNormalizer.normalize(node.title_eng));
-                    });
-                    
-                    if (hasAlternativeMatch) {
-                        fuzzyMatchArray = dataArray;
-                        break;
-                    }
-                }
-            }
-
-            if (fuzzyMatchArray && fuzzyMatchArray.length > 0) {
-                const fuzzyRes = fuzzyMatchArray.find(m => m.type === currentMediaType);
-                if (fuzzyRes) return fuzzyRes;
-            }
+            const fuzzyRes = this.fuzzyFind(itemTitle, currentMediaType);
+            if (fuzzyRes) return fuzzyRes;
 
             // Layer 4: SeasonChain Match (Franchise Traversal)
             const extractedSeason = SeasonExtractor.extractSeasonNumber(rawText);
@@ -199,32 +228,13 @@ export class MatcherService {
             if (!urlTitle || urlTitle.length <= 3) return { match: null, urlTitle };
 
             const normUrlTitle = TextNormalizer.normalize(urlTitle);
+            const manual = this.findManual(normUrlTitle, currentMediaType);
+            if (manual) return { match: manual, urlTitle };
             const resolvedUrlTitle = SynonymDictionary.resolve(normUrlTitle);
             
-            let matchArray = this.globalMediaMap.get(resolvedUrlTitle);
-            
-            if (!matchArray) {
-                for (let [malTitle, dataArray] of this.globalMediaMap.entries()) {
-                    if (Matcher.isFuzzyMatch(resolvedUrlTitle, malTitle)) {
-                        matchArray = dataArray;
-                        break;
-                    }
-                    
-                    const hasAlternativeMatch = dataArray.some(node => {
-                        return node.title_eng && Matcher.isFuzzyMatch(resolvedUrlTitle, TextNormalizer.normalize(node.title_eng));
-                    });
-                    
-                    if (hasAlternativeMatch) {
-                        matchArray = dataArray;
-                        break;
-                    }
-                }
-            }
-
-            let match = null;
-            if (matchArray && matchArray.length > 0) {
-                match = matchArray.find(m => m.type === currentMediaType) || null;
-            }
+            const exactArray = this.globalMediaMap.get(resolvedUrlTitle);
+            const exact = exactArray ? exactArray.find(m => m.type === currentMediaType) : null;
+            const match = exact || this.fuzzyFind(resolvedUrlTitle, currentMediaType);
 
             return { match, urlTitle };
         } catch (error) {

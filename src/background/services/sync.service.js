@@ -5,22 +5,22 @@
  */
 
 export class SyncService {
-    static PROJECT_ID = 'mal-highlighter-cloud'; 
-    static FIREBASE_API_KEY = 'AIzaSyB0JwypgHiKBp55R-qztyXIo8MXR56NSz4'; 
-    
+    static PROJECT_ID = 'mal-highlighter-cloud';
+    static FIREBASE_API_KEY = 'AIzaSyB0JwypgHiKBp55R-qztyXIo8MXR56NSz4';
+
     static FIRESTORE_URL = `https://firestore.googleapis.com/v1/projects/${this.PROJECT_ID}/databases/(default)/documents`;
     // Endpoint oficial do Firebase para trocar um refresh token por uma sessão válida
     static SECURE_TOKEN_URL = `https://securetoken.googleapis.com/v1/token?key=${this.FIREBASE_API_KEY}`;
-    
+
     static SYNCABLE_KEYS = [
-        'extensionLang', 'panelEnabled', 'panelTransparent', 
-        'savePanelPos', 'autoUpdateProgress', 'autoDetectSeasons', 'highlightStatuses', 
-        'customColors', 'monitoredSites', 'notificationLog', 'seenEpisodes'
+        'extensionLang', 'panelEnabled', 'panelTransparent',
+        'savePanelPos', 'autoUpdateProgress', 'autoDetectSeasons', 'highlightStatuses',
+        'customColors', 'manualMappings', 'monitoredSites', 'notificationLog', 'seenEpisodes'
     ];
 
     static debounceTimer = null;
-    static isPullingDown = false; 
-    static currentUser = null; 
+    static isPullingDown = false;
+    static currentUser = null;
 
     /**
      * Generic Google OAuth2 using WebAuthFlow (Browser Agnostic)
@@ -32,8 +32,8 @@ export class SyncService {
             const clientId = chrome.runtime.getManifest().oauth2.client_id;
             const redirectUri = chrome.identity.getRedirectURL();
             const nonce = Math.random().toString(36).substring(2, 15);
-            
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + 
+
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
                 `client_id=${clientId}&` +
                 `response_type=id_token&` +
                 `redirect_uri=${encodeURIComponent(redirectUri)}&` +
@@ -125,7 +125,7 @@ export class SyncService {
 
             const data = await res.json();
             if (!data.idToken || !data.localId) throw new Error(data.error?.message || "Firebase Auth Exchange Failed");
-            
+
             const jwtData = this.parseJwt(googleToken);
             const email = jwtData && jwtData.email ? jwtData.email : 'Cloud User';
 
@@ -157,9 +157,9 @@ export class SyncService {
 
     static async pullFromCloud() {
         try {
-            const auth = await this.authenticate(false); 
+            const auth = await this.authenticate(false);
             if (!auth) return; // Se não estiver logado, sai limpo
-            
+
             console.log("[SyncService] Pulling data from cloud...");
             const res = await fetch(`${this.FIRESTORE_URL}/users/${auth.localId}`, {
                 headers: { 'Authorization': `Bearer ${auth.idToken}` }
@@ -176,10 +176,10 @@ export class SyncService {
             const data = await res.json();
             if (data.fields && data.fields.settings && data.fields.settings.stringValue) {
                 const cloudSettings = JSON.parse(data.fields.settings.stringValue);
-                
+
                 this.isPullingDown = true;
                 await chrome.storage.local.set(cloudSettings);
-                
+
                 setTimeout(() => { this.isPullingDown = false; }, 500);
                 console.log("[SyncService] Local storage successfully updated from cloud.");
             }
@@ -196,7 +196,7 @@ export class SyncService {
             if (!auth) return; // Se não estiver logado, sai limpo
 
             const localData = await chrome.storage.local.get(this.SYNCABLE_KEYS);
-            
+
             const documentBody = {
                 fields: {
                     settings: { stringValue: JSON.stringify(localData) },
@@ -206,7 +206,7 @@ export class SyncService {
 
             const res = await fetch(`${this.FIRESTORE_URL}/users?documentId=${auth.localId}`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${auth.idToken}`,
                     'Content-Type': 'application/json'
                 },
@@ -216,7 +216,7 @@ export class SyncService {
             if (res.status === 409) {
                 await fetch(`${this.FIRESTORE_URL}/users/${auth.localId}`, {
                     method: 'PATCH',
-                    headers: { 
+                    headers: {
                         'Authorization': `Bearer ${auth.idToken}`,
                         'Content-Type': 'application/json'
                     },
@@ -235,12 +235,12 @@ export class SyncService {
             if (area !== 'local' || this.isPullingDown) return;
 
             const shouldSync = Object.keys(changes).some(key => this.SYNCABLE_KEYS.includes(key));
-            
+
             if (shouldSync) {
                 clearTimeout(this.debounceTimer);
                 this.debounceTimer = setTimeout(() => {
                     this.pushToCloud();
-                }, 3000); 
+                }, 3000);
             }
         });
     }

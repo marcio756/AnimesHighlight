@@ -10,7 +10,7 @@ export const CONFIG = {
     STRESS_MULTIPLIER: 5.0,
     SITE_KEYWORDS: [
         'anime', 'manga', 'donghua', 'episodio', 'episode', 'season', 
-        'temporada', 'assistir', 'online', 'legendado', 'dublado', 'stream',
+        'temporada', 'assistir', 'legendado', 'dublado', 'stream',
         'ler', 'capitulo', 'chapter', 'manhwa', 'comic', 'scan', 'webtoon'
     ],
     BLOCKED_DOMAINS: [
@@ -39,18 +39,6 @@ export const STATUS_MAP = {
     4: { class: 'mal-dropped', labelKey: 'statusDropped', color: '#a12f31' },
     6: { class: 'mal-plan', labelKey: 'statusPlanned', color: '#787878' }
 };
-
-export class SWLogger {
-    static log(message, data = null) {
-        try {
-            chrome.runtime.sendMessage({ 
-                action: "SW_LOG", 
-                message: `[MAL Highlighter Debug] ${message}`, 
-                data: data 
-            });
-        } catch(e) {}
-    }
-}
 
 export class SeasonExtractor {
     static extractSeasonNumber(text) {
@@ -163,8 +151,13 @@ export class PerformanceGuard {
         const title = document.title.toLowerCase();
         const metaDesc = document.querySelector('meta[name="description"]')?.content.toLowerCase() || "";
         
-        const hasKeyword = CONFIG.SITE_KEYWORDS.some(kw => 
-            title.includes(kw) || metaDesc.includes(kw) || url.includes(kw)
+        // Palavras curtas exigem fronteira de palavra (evita "seller", "scanner"...); as longas são prefixos seguros
+        const SHORT_KEYWORDS = new Set(['ler', 'scan', 'comic']);
+        const haystack = `${title} ${metaDesc} ${url}`;
+        const hasKeyword = CONFIG.SITE_KEYWORDS.some(kw =>
+            SHORT_KEYWORDS.has(kw)
+                ? new RegExp(`(^|[^a-z0-9])${kw}([^a-z0-9]|$)`).test(haystack)
+                : haystack.includes(kw)
         );
 
         if (!hasKeyword) console.log("[MAL Highlighter] Script idle: Not a recognized media page.");

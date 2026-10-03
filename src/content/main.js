@@ -1,7 +1,7 @@
 // src/content/main.js
 
 import { PerformanceGuard, ContextAnalyzer, TextNormalizer, DynamicDebouncer, UI_BLOCKLIST, Matcher } from './utils.js';
-import { SynonymDictionary, DataManager } from './data.js';
+import { SynonymDictionary, ManualMappingManager, DataManager } from './data.js';
 import { UIManager } from './ui.js';
 import { ProgressService } from './services/progress.service.js';
 import { MatcherService } from './services/matcher.service.js';
@@ -13,6 +13,7 @@ class MalController {
         this.globalMediaMap = new Map();
         this.dynamicDebouncer = null;
         this.isSearching = false;
+        this.lastUrl = null;
         
         this.isPanelEnabled = true; 
         this.activeHighlights = [1, 2, 3, 4, 6]; 
@@ -29,6 +30,7 @@ class MalController {
         
         try {
             await SynonymDictionary.init(); 
+            await ManualMappingManager.init();
             
             const settings = await chrome.storage.local.get();
             this.isPanelEnabled = settings.panelEnabled !== false; 
@@ -41,6 +43,7 @@ class MalController {
 
             UIManager.setTransparency(settings.panelTransparent === true);
             UIManager.setSavePosition(settings.savePanelPos === true);
+            UIManager.setAutoDetectSeasons(this.autoDetectSeasons);
 
             await UIManager.initLanguage();
             await UIManager.initSettings(); 
@@ -59,6 +62,10 @@ class MalController {
             });
 
             chrome.storage.onChanged.addListener((changes, area) => {
+                if (area === 'local' && changes.autoDetectSeasons !== undefined) {
+                    this.autoDetectSeasons = changes.autoDetectSeasons.newValue === true;
+                    UIManager.setAutoDetectSeasons(this.autoDetectSeasons);
+                }
                 if (area === 'local' && changes.autoUpdateProgress !== undefined) {
                     this.autoUpdateProgress = changes.autoUpdateProgress.newValue === true;
                     if (this.autoUpdateProgress) {
@@ -73,6 +80,11 @@ class MalController {
             this.matcherService = new MatcherService(this.globalMediaMap);
 
             this.dynamicDebouncer = new DynamicDebouncer(() => {
+                // Navegação SPA: ao mudar de URL o painel anterior deixa de ser válido
+                if (window.location.href !== this.lastUrl) {
+                    if (this.lastUrl !== null) UIManager.hidePanel();
+                    this.lastUrl = window.location.href;
+                }
                 const currentMediaType = ContextAnalyzer.guessContentType();
                 let panelVisible = document.getElementById('malControlPanel')?.classList.contains('visible') || false;
                 this.analyzeUrlForPanel(currentMediaType, panelVisible);
@@ -125,7 +137,7 @@ class MalController {
                 if (match) {
                     this.progressService.attemptAutoUpdate(match, currentMediaType, this.autoUpdateProgress, this.autoDetectSeasons, this.isPanelEnabled); 
                     if (!document.getElementById('malControlPanel')?.classList.contains('visible')) {
-                        UIManager.showPanel(match.rawTitle || text, match);
+                        this.showPanelFor(match.rawTitle || text, match);
                     }
                 }
             }
@@ -142,7 +154,7 @@ class MalController {
         }
 
         if (match && !panelVisible) {
-            UIManager.showPanel(match.rawTitle || urlTitle, match);
+            this.showPanelFor(match.rawTitle || urlTitle, match);
             return true;
         } else if (!panelVisible && !ContextAnalyzer.isListingPage() && urlTitle) {
             this.searchAndShowPanel(urlTitle);
@@ -152,25 +164,66 @@ class MalController {
         return false;
     }
 
+    /**
+     * Shows the panel; when the current page is manually mapped to this entry, offers an "unlink" action.
+     */
+    showPanelFor(title, data) {
+        const key = TextNormalizer.normalize(TextNormalizer.getSlugFromUrl());
+        const mapped = ManualMappingManager.get(key);
+        const isManual = mapped && data && mapped.id === data.id && mapped.type === data.type;
+        UIManager.showPanel(title, data, isManual ? () => this.unlinkManually(key, data) : null);
+    }
+
+    /**
+     * Removes a manual mapping (wrong association) and re-runs the normal lookup for this page.
+     */
+    async unlinkManually(key, data) {
+        await ManualMappingManager.remove(key);
+        UIManager.removeVisualsById(data.id);
+        UIManager.hidePanel();
+        const urlTitle = TextNormalizer.getSlugFromUrl();
+        if (urlTitle) this.searchAndShowPanel(urlTitle);
+    }
+
+    /**
+     * Saves a user-provided mapping (MAL URL, id or name) for the given site title.
+     * @returns {Promise<boolean>} true if the mapping was resolved and saved.
+     */
+    async linkManually(cleanQuery, input, mediaType) {
+        const response = await new Promise(resolve =>
+            chrome.runtime.sendMessage({ action: "RESOLVE_MAL_LINK", input, mediaType }, resolve));
+        if (chrome.runtime.lastError || !response || !response.success) return false;
+
+        const { id, type, title, total } = response.data;
+        await ManualMappingManager.save(cleanQuery, { id, type, title, total });
+
+        let status = null;
+        for (const arr of this.globalMediaMap.values()) {
+            const found = arr.find(v => v.id === id && v.type === type);
+            if (found) { status = found.status; break; }
+        }
+        this.showPanelFor(title, { id, status, type, total });
+        return true;
+    }
+
     async searchAndShowPanel(rawTitle) {
         if (!this.isPanelEnabled || this.isSearching) return; 
         if (document.getElementById('malControlPanel')?.classList.contains('visible')) return;
         
         this.isSearching = true;
-        document.body.style.cursor = 'wait';
 
         const currentMediaType = ContextAnalyzer.guessContentType();
         const result = await SearchService.findExternalMatch(rawTitle, currentMediaType, this.globalMediaMap);
 
         this.isSearching = false;
-        document.body.style.cursor = 'default';
 
         if (!result || result.notFound) {
-            UIManager.showNotFoundPanel(result ? result.cleanQuery : rawTitle);
+            const cleanQuery = result ? result.cleanQuery : TextNormalizer.normalize(rawTitle);
+            UIManager.showNotFoundPanel(cleanQuery, (input) => this.linkManually(cleanQuery, input, currentMediaType));
             return;
         }
 
-        UIManager.showPanel(result.title, { id: result.id, status: result.status, type: result.type });
+        this.showPanelFor(result.title, { id: result.id, status: result.status, type: result.type, total: result.total });
     }
 }
 

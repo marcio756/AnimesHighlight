@@ -5,7 +5,7 @@
  * @description Handles complex heuristic matching for items not found in the local cache by querying external APIs.
  */
 import { TextNormalizer, Matcher } from '../utils.js';
-import { SynonymDictionary } from '../data.js';
+import { SynonymDictionary, ManualMappingManager } from '../data.js';
 
 export class SearchService {
     /**
@@ -19,8 +19,18 @@ export class SearchService {
         const cleanQuery = TextNormalizer.normalize(rawTitle);
         if (cleanQuery.length < 3) return null;
 
+        const mapped = ManualMappingManager.get(cleanQuery);
+        if (mapped && mapped.type === currentMediaType) {
+            let status = null;
+            for (const arr of globalMediaMap.values()) {
+                const found = arr.find(v => v.id === mapped.id && v.type === mapped.type);
+                if (found) { status = found.status; break; }
+            }
+            return { id: mapped.id, title: mapped.title, status, type: mapped.type, total: mapped.total || 0, cleanQuery };
+        }
+
         return new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: "SEARCH_ITEM", title: cleanQuery }, (response) => {
+            chrome.runtime.sendMessage({ action: "SEARCH_ITEM", title: cleanQuery, mediaType: currentMediaType }, (response) => {
                 let bestMatch = null;
                 let finalStatus = null;
                 let finalType = null;
@@ -75,7 +85,7 @@ export class SearchService {
                 }
 
                 if (bestMatch) {
-                    resolve({ id: bestMatch.mal_id, title: bestMatch.title, status: finalStatus, type: finalType, cleanQuery });
+                    resolve({ id: bestMatch.mal_id, title: bestMatch.title, status: finalStatus, type: finalType, total: (bestMatch.episodes || bestMatch.chapters || 0), cleanQuery });
                 } else {
                     resolve({ notFound: true, cleanQuery });
                 }

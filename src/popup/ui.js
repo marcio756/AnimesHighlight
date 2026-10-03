@@ -95,7 +95,7 @@ export class PopupUI {
         if (!container || !avatarEl || !textEl) return;
         if (skeletonEl) skeletonEl.style.display = 'none';
         
-        avatarEl.src = avatarUrl;
+        if (avatarUrl) avatarEl.src = avatarUrl;
         
         let msg = I18nService.get('profileWelcome', currentLang) || `Welcome, ${username}!`;
         textEl.innerText = msg.replace('{user}', username);

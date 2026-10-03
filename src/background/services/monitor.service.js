@@ -7,6 +7,7 @@
 
 import { I18nService } from '../../common/i18n.js';
 import { MalService } from './api.service.js';
+import { TextNormalizer } from '../../content/utils.js';
 
 export const MONITOR_CONFIG = {
     ALARM_NAME: "MAL_MONITOR_CHECK",
@@ -46,9 +47,9 @@ export class ReleaseMonitorService {
             await chrome.alarms.clear(MONITOR_CONFIG.ALARM_NAME);
 
             if (hasActiveSites) {
-                chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, { 
-                    delayInMinutes: 1, 
-                    periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN 
+                chrome.alarms.create(MONITOR_CONFIG.ALARM_NAME, {
+                    delayInMinutes: 1,
+                    periodInMinutes: MONITOR_CONFIG.CHECK_INTERVAL_MIN
                 });
             }
         } catch (error) {
@@ -63,16 +64,16 @@ export class ReleaseMonitorService {
         const username = store.malUsername;
         const sites = store.monitoredSites || [];
         const activeSites = sites.filter(site => site.enabled);
-        let seenEpisodes = store.seenEpisodes || {}; 
+        let seenEpisodes = store.seenEpisodes || {};
         const synonymsCache = store.mal_synonyms_cache || {};
-        const notificationLog = store.notificationLog || []; 
+        const notificationLog = store.notificationLog || [];
 
         if (!username || activeSites.length === 0) return;
 
         try {
             console.log("[Monitor] Iniciando verificação de lançamentos para:", username);
             const activeItemsList = await MalService.fetchActiveItemsOnly(username);
-            
+
             let notificationsQueue = [];
             let stateChanged = false;
 
@@ -84,34 +85,34 @@ export class ReleaseMonitorService {
                     console.warn("[Monitor] Falha ao aceder ao site:", result.value?.site?.url || "Desconhecido");
                     continue;
                 }
-                
+
                 const { site, html } = result.value;
 
                 for (const item of activeItemsList) {
                     const nextProgress = (item.progress || 0) + 1;
                     const uniqueItemId = `${item.type}_${item.id}`;
 
-                    if (this.isItemSeen(seenEpisodes, uniqueItemId, nextProgress)) continue; 
+                    if (this.isItemSeen(seenEpisodes, uniqueItemId, nextProgress)) continue;
 
                     const alreadyNotified = notificationLog.some(log => log.id === item.id && log.type === item.type && log.ep === nextProgress);
                     if (alreadyNotified) {
-                        this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress); 
+                        this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress);
                         stateChanged = true;
                         continue;
                     }
 
                     // Previne que o monitor continue a procurar episódios que ultrapassam o limite da temporada base
                     if (item.total > 0 && nextProgress > item.total) {
-                        continue; 
+                        continue;
                     }
 
-                    const normTarget = item.title.toLowerCase();
+                    const normTarget = TextNormalizer.normalize(item.title);
                     const titlesToCheck = new Set([item.title]);
-                    
+
                     if (item.title_eng) titlesToCheck.add(item.title_eng);
 
                     for (const [alias, official] of Object.entries(synonymsCache)) {
-                        if (official === normTarget || official === item.title) {
+                        if (official === normTarget || official === item.title.toLowerCase()) {
                             titlesToCheck.add(alias);
                         }
                     }
@@ -128,10 +129,10 @@ export class ReleaseMonitorService {
                             id: item.id,
                             type: item.type,
                             nextEp: nextProgress,
-                            siteUrl: detectedSpecificUrl, 
+                            siteUrl: detectedSpecificUrl,
                             siteName: site.name
                         });
-                        
+
                         this.markItemAsSeen(seenEpisodes, uniqueItemId, nextProgress);
                         stateChanged = true;
                     }
@@ -159,7 +160,7 @@ export class ReleaseMonitorService {
         if (!seenMap[uniqueItemId]) seenMap[uniqueItemId] = [];
         if (!seenMap[uniqueItemId].includes(progressNumber)) {
             seenMap[uniqueItemId].push(progressNumber);
-            if (seenMap[uniqueItemId].length > 5) seenMap[uniqueItemId].shift(); 
+            if (seenMap[uniqueItemId].length > 5) seenMap[uniqueItemId].shift();
         }
     }
 
@@ -170,9 +171,9 @@ export class ReleaseMonitorService {
             const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
             clearTimeout(id);
             return await response.text();
-        } catch (e) { 
+        } catch (e) {
             console.warn(`[Monitor] Fetch timeout or error for ${url}`);
-            return ""; 
+            return "";
         }
     }
 
@@ -195,11 +196,11 @@ export class ReleaseMonitorService {
         if (!fullyCleanedText.includes(normalizedTitle)) return null;
 
         try {
-            const escapedTitle = normalizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+            const escapedTitle = normalizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const keywordGroup = "(ep|episodio|episode|e|capitulo|cap|chapter|ch|scan|c)";
-            
+
             const pattern = new RegExp(`${escapedTitle}(?:.{0,60}?\\b${keywordGroup}\\s*[-:]?\\s*0*${progressNumber}\\b|.{0,15}?\\b0*${progressNumber}\\b)`, "i");
-            
+
             if (!pattern.test(fullyCleanedText)) return null;
 
             const hrefRegex = /href=["']([^"']+)["']/gi;
@@ -217,7 +218,7 @@ export class ReleaseMonitorService {
 
             for (let href of links) {
                 const hrefLower = href.toLowerCase();
-                
+
                 if (hrefLower.includes('.css') || hrefLower.includes('.js') || hrefLower.includes('page=')) continue;
 
                 let score = 0;
@@ -242,46 +243,46 @@ export class ReleaseMonitorService {
                     score += 5;
                 }
 
-                if (score > bestScore && score >= 10) { 
+                if (score > bestScore && score >= 10) {
                     bestScore = score;
                     bestHref = href;
                 }
             }
-            
+
             try {
                 return new URL(bestHref, fallbackUrl).href;
             } catch (e) {
                 return bestHref.startsWith('http') ? bestHref : fallbackUrl;
             }
-        } catch (e) { 
-            return null; 
+        } catch (e) {
+            return null;
         }
     }
 
     static async sendNotification(items) {
         try {
             const lang = await I18nService.getCurrentLang();
-            
+
             const badgeStore = await SafeStorage.get('unreadCount');
             let currentUnread = (badgeStore.unreadCount || 0) + items.length;
             await SafeStorage.set({ unreadCount: currentUnread });
             chrome.action.setBadgeText({ text: currentUnread.toString() });
-            chrome.action.setBadgeBackgroundColor({ color: '#E53935' }); 
-            
+            chrome.action.setBadgeBackgroundColor({ color: '#E53935' });
+
             const storageRes = await SafeStorage.get(['notificationMeta']);
             let notificationMeta = storageRes.notificationMeta || {};
 
             for (const item of items) {
                 const notifId = `mal_notif_${item.type}_${item.id}_${item.nextEp}_${Date.now()}`;
-                
+
                 const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
                 const message = `${item.title} - ${prefix} ${item.nextEp} (${item.siteName})`;
-                
+
                 chrome.notifications.create(notifId, {
-                    type: 'basic', 
-                    iconUrl: '/icon.png', 
+                    type: 'basic',
+                    iconUrl: '/icon.png',
                     title: I18nService.get('notifNew', lang),
-                    message: message, 
+                    message: message,
                     priority: 2,
                     buttons: [
                         { title: I18nService.get('notifBtnWatch', lang) },
@@ -307,15 +308,15 @@ export class ReleaseMonitorService {
             const timestamp = Date.now();
             const newEntries = items.map(item => {
                 const prefix = item.type === 'anime' ? I18nService.get('prefixEp', lang) : I18nService.get('prefixCh', lang);
-                return { 
-                    text: `${item.title} - ${prefix} ${item.nextEp}`, 
+                return {
+                    text: `${item.title} - ${prefix} ${item.nextEp}`,
                     url: item.siteUrl || item.url,
                     siteName: item.siteName || 'Unknown Site',
                     id: item.id,
                     type: item.type,
                     ep: item.nextEp,
-                    date: timestamp, 
-                    read: false 
+                    date: timestamp,
+                    read: false
                 };
             });
 

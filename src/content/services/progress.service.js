@@ -5,18 +5,19 @@ import { DataManager } from '../data.js';
 
 export class ProgressService {
     constructor() {
-        this.autoUpdatedId = null;
+        this.autoUpdatedKey = null;
     }
 
     /**
      * Avalia e executa atualizações automáticas de progresso.
      */
     attemptAutoUpdate(match, currentMediaType, autoUpdateProgress) {
-        if (!autoUpdateProgress || !match || this.autoUpdatedId === match.id) return;
+        if (!autoUpdateProgress || !match) return;
 
         const url = window.location.pathname;
         const title = document.title;
         const currentNum = ProgressExtractor.extract(url, currentMediaType) || ProgressExtractor.extract(title, currentMediaType);
+        if (this.autoUpdatedKey === `${match.id}:${currentNum}`) return;
 
         if (currentNum !== null && currentNum > match.progress) {
             const field = currentMediaType === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
@@ -35,7 +36,7 @@ export class ProgressService {
      * Executa a atualização de progresso aplicando UI Otimista para perceção de velocidade.
      */
     executeAutoUpdate(match, currentMediaType, finalNum, field) {
-        this.autoUpdatedId = match.id; 
+        this.autoUpdatedKey = `${match.id}:${finalNum}`; 
 
         // Optimistic UI: Assumir sucesso e atualizar imediatamente a interface
         match.progress = finalNum;

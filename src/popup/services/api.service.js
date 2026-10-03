@@ -4,6 +4,8 @@
  * API Service (Popup Context)
  * @description Gere as chamadas de rede feitas a partir do Popup, incluindo a validação na API do Jikan e a comunicação com o Service Worker.
  */
+import { NetworkService } from '../../common/network.service.js';
+
 export class ApiService {
     /**
      * Verifica se o utilizador existe no MyAnimeList e obtém a sua imagem de perfil.
@@ -11,10 +13,16 @@ export class ApiService {
      * @returns {Promise<string>} O URL do avatar do utilizador.
      */
     static async verifyMalUser(username) {
-        const response = await fetch(`https://api.jikan.moe/v4/users/${username}`);
-        if (!response.ok) throw new Error('User not found');
-        const data = await response.json();
-        return data.data.images.jpg.image_url;
+        try {
+            const response = await NetworkService.fetchWithTimeout(`https://api.jikan.moe/v4/users/${encodeURIComponent(username)}`, {}, 10000);
+            if (response.status === 404) throw new Error('User not found');
+            if (!response.ok) return '';
+            const data = await response.json();
+            return data?.data?.images?.jpg?.image_url || '';
+        } catch (error) {
+            if (error.message === 'User not found') throw error;
+            return ''; // Jikan indisponível: a validação real é feita ao buscar a lista
+        }
     }
 
     /**
@@ -24,7 +32,11 @@ export class ApiService {
      */
     static async syncMalList(username) {
         return new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: username }, resolve);
+            const timer = setTimeout(() => resolve({ success: false, error: 'Timeout' }), 90000);
+            chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: username, force: true }, (res) => {
+                clearTimeout(timer);
+                resolve(chrome.runtime.lastError ? { success: false } : res);
+            });
         });
     }
 

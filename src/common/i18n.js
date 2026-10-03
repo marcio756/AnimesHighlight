@@ -41,6 +41,7 @@ const DICTIONARY = {
         lblEnableTransparency: "Transparent Panel (Hover to view)",
         lblSavePanelPos: "Save Panel Drag Position",
         lblAutoUpdate: "Auto-Update Progress (URL Sync)",
+        lblAutoSeasons: "Auto-Detect Next Season",
         lblAutoDetectSeasons: "Auto-Detect Seasons from Episode Number",
         lblHighlights: "Statuses to Highlight:",
         lblColors: "Status Colors:",
@@ -63,6 +64,10 @@ const DICTIONARY = {
         
         panelOpenBtn: "Open MyAnimeList",
         btnSearchMal: "Search on MAL",
+        manualPlaceholder: "MAL link, ID or name",
+        manualLinkBtn: "Link",
+        manualLinkFail: "Not found",
+        manualUnlinkBtn: "Wrong anime? Unlink",
         btnQuickAdd: "Quick Add +1",
         
         notifTitle: "MAL Highlighter Monitor",
@@ -130,6 +135,7 @@ const DICTIONARY = {
         lblEnableTransparency: "Ativar Transparência no Painel",
         lblSavePanelPos: "Guardar Posição do Painel",
         lblAutoUpdate: "Atualizar Progresso Autom.",
+        lblAutoSeasons: "Detetar Próxima Temporada",
         lblAutoDetectSeasons: "Detetar Temporadas Auto. pela Numeração",
         lblHighlights: "Estados a Destacar:",
         lblColors: "Cores dos Estados:",
@@ -152,6 +158,10 @@ const DICTIONARY = {
         
         panelOpenBtn: "Abrir no MyAnimeList",
         btnSearchMal: "Pesquisar no MAL",
+        manualPlaceholder: "Link, ID ou nome do MAL",
+        manualLinkBtn: "Associar",
+        manualLinkFail: "Não encontrado",
+        manualUnlinkBtn: "Anime errado? Desassociar",
         btnQuickAdd: "Adicionar Rápido +1",
         
         notifTitle: "Monitor do Realçador MAL",

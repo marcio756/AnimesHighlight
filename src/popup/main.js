@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const checkPanelTrans = document.getElementById('panelTransparent');
     const checkSavePanelPos = document.getElementById('savePanelPos');
     const checkAutoUpdate = document.getElementById('autoUpdateProgress');
+    const checkAutoSeasons = document.getElementById('autoDetectSeasons');
     const hlStatusCheckboxes = document.querySelectorAll('.hl-status');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusSettings = document.getElementById('statusSettings');
@@ -165,6 +166,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (res.panelTransparent !== undefined && checkPanelTrans) checkPanelTrans.checked = res.panelTransparent;
         if (res.savePanelPos !== undefined && checkSavePanelPos) checkSavePanelPos.checked = res.savePanelPos;
         if (res.autoUpdateProgress !== undefined && checkAutoUpdate) checkAutoUpdate.checked = res.autoUpdateProgress;
+        if (res.autoDetectSeasons !== undefined && checkAutoSeasons) checkAutoSeasons.checked = res.autoDetectSeasons;
         
         if (res.highlightStatuses) hlStatusCheckboxes.forEach(cb => cb.checked = res.highlightStatuses.includes(parseInt(cb.value)));
         if (res.customColors) {
@@ -273,6 +275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             panelTransparent: checkPanelTrans?.checked,
             savePanelPos: checkSavePanelPos?.checked, 
             autoUpdateProgress: checkAutoUpdate?.checked, 
+            autoDetectSeasons: checkAutoSeasons?.checked, 
             highlightStatuses: activeHighlights, 
             customColors: activeColors
         };
@@ -316,13 +319,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 PopupUI.updateStatus(statusProfile, I18nService.get('statusSaved', currentLang), "success");
                 PopupUI.showProfile(username, imageUrl, avatar, welcomeText, profileArea, profileSkeleton, currentLang);
                 saveProfileBtn.disabled = false;
-                localStorage.removeItem('mal_v35_full_list'); 
+                chrome.storage.local.remove(['mal_v36_full_list', 'mal_season_chain_cache']);
             } else {
                 throw new Error('Falha ao sincronizar lista');
             }
         } catch (error) {
             ProgressService.stop();
             if(profileSkeleton) profileSkeleton.style.display = 'none';
+            if(profileArea && avatar?.getAttribute('src')) profileArea.style.display = 'flex';
             PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
             saveProfileBtn.disabled = false;
         }

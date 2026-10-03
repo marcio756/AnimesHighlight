@@ -89,9 +89,10 @@ export class SiteListComponent {
 
         listEl.querySelectorAll('.delete-site').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const li = e.target.closest('.site-card');
+                const siteId = e.currentTarget.dataset.id;
+                const li = e.currentTarget.closest('.site-card');
                 li.style.opacity = '0.3'; 
-                setTimeout(() => callbacks.onDelete(e.currentTarget.dataset.id), 150);
+                setTimeout(() => callbacks.onDelete(siteId), 150);
             });
         });
     }

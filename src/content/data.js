@@ -37,7 +37,7 @@ class SafeStorage {
 
 export class RelationDictionary {
     static relationsCache = {};
-    
+
     static async init() {
         try {
             const res = await SafeStorage.get(['mal_relations_cache']);
@@ -52,17 +52,47 @@ export class RelationDictionary {
     }
 }
 
+/**
+ * Manual Mappings
+ * @description Associações criadas pelo utilizador ("este título do site é este anime do MAL").
+ * Chave = título normalizado do site; valor = { id, type, title }.
+ */
+export class ManualMappingManager {
+    static cache = {};
+
+    static async init() {
+        const res = await SafeStorage.get(['manualMappings']);
+        this.cache = res.manualMappings || {};
+    }
+
+    static get(normTitle) {
+        return normTitle ? this.cache[normTitle] || null : null;
+    }
+
+    static async remove(normTitle) {
+        if (!normTitle || !this.cache[normTitle]) return;
+        delete this.cache[normTitle];
+        await SafeStorage.set({ manualMappings: this.cache });
+    }
+
+    static async save(normTitle, mapping) {
+        if (!normTitle || !mapping || !mapping.id) return;
+        this.cache[normTitle] = { id: mapping.id, type: mapping.type, title: mapping.title, total: mapping.total || 0 };
+        await SafeStorage.set({ manualMappings: this.cache });
+    }
+}
+
 export class SynonymDictionary {
     static cache = {};
 
     static async init() {
         try {
-            await RelationDictionary.init(); 
+            await RelationDictionary.init();
             const res = await SafeStorage.get(['mal_synonyms_cache', 'synonym_version']);
-            
-            if (res.synonym_version !== 3) {
+
+            if (res.synonym_version !== 4) {
                 this.cache = {};
-                await SafeStorage.set({ mal_synonyms_cache: {}, synonym_version: 3 });
+                await SafeStorage.set({ mal_synonyms_cache: {}, synonym_version: 4 });
             } else {
                 this.cache = res.mal_synonyms_cache || {};
             }
@@ -105,11 +135,15 @@ export class DataManager {
         SafeStorage.remove([CONFIG.CACHE_KEY]);
     }
 
-    static async updateCacheItem(id, type, newData) {
+    /**
+     * Updates an item in the cached list. If the item is not cached yet (e.g. just added to the
+     * user's MAL list from the panel) and `meta.title` is provided, it is inserted instead.
+     */
+    static async updateCacheItem(id, type, newData, meta = null) {
         try {
             const res = await SafeStorage.get([CONFIG.CACHE_KEY]);
             const cachedData = res[CONFIG.CACHE_KEY];
-            
+
             if (cachedData) {
                 try {
                     const parsed = JSON.parse(cachedData);
@@ -121,6 +155,17 @@ export class DataManager {
                                 updated = true;
                             }
                         }
+                    }
+                    if (!updated && meta && meta.title) {
+                        const normTitle = TextNormalizer.normalize(meta.title);
+                        const newItem = {
+                            status: 6, id, score: 0, rawTitle: meta.title, title_eng: null,
+                            type, progress: 0, total: meta.total || 0, ...newData
+                        };
+                        const existing = parsed.data.find(([t]) => t === normTitle);
+                        if (existing) existing[1].push(newItem);
+                        else parsed.data.push([normTitle, [newItem]]);
+                        updated = true;
                     }
                     if (updated) {
                         await SafeStorage.set({ [CONFIG.CACHE_KEY]: JSON.stringify(parsed) });
@@ -139,27 +184,33 @@ export class DataManager {
             const USERNAME = await this.getUsername();
             const res = await SafeStorage.get([CONFIG.CACHE_KEY]);
             const cachedData = res[CONFIG.CACHE_KEY];
-            
+            let staleMap = null;
+
             if (cachedData) {
                 try {
                     const { timestamp, data, owner } = JSON.parse(cachedData);
-                    if ((Date.now() - timestamp < CONFIG.CACHE_DURATION) && owner === USERNAME) {
-                        return new Map(data);
+                    if (owner === USERNAME) {
+                        if (Date.now() - timestamp < CONFIG.CACHE_DURATION) return new Map(data);
+                        staleMap = new Map(data); // usada se o MAL estiver inacessível
                     }
                 } catch (e) {
                     this.invalidateCache();
                 }
             }
-            
+
             return new Promise((resolve) => {
                 chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: USERNAME }, async (response) => {
                     if (chrome.runtime.lastError) console.warn("[DataManager] Message error:", chrome.runtime.lastError);
-                    
+
                     const newMap = new Map();
-                    if (response && response.success && Array.isArray(response.data)) {
+                    if (!(response && response.success && Array.isArray(response.data))) {
+                        resolve(staleMap || newMap);
+                        return;
+                    }
+                    {
                         response.data.forEach(item => {
                             if (!item || !item.title) return;
-                            
+
                             const normTitle = TextNormalizer.normalize(item.title);
                             if (!newMap.has(normTitle)) newMap.set(normTitle, []);
 
@@ -174,7 +225,7 @@ export class DataManager {
                                 total: item.total
                             });
                         });
-                        
+
                         await SafeStorage.set({
                             [CONFIG.CACHE_KEY]: JSON.stringify({
                                 timestamp: Date.now(),

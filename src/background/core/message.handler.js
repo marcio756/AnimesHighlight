@@ -10,13 +10,13 @@ export class MessageHandler {
      */
     static init() {
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            
+
             // Validação de Segurança de Origem: Rejeita mensagens de origens não reconhecidas
             if (sender.id !== chrome.runtime.id) {
                 console.warn("[Security] Rejeitado pedido de origem externa suspeita:", sender);
                 return;
             }
-            
+
             // Logs do Content Script impressos no Service Worker
             if (request.action === "SW_LOG") {
                 console.group(request.message);
@@ -27,33 +27,36 @@ export class MessageHandler {
             }
 
             if (request.action === "FETCH_MAL_LIST") {
-                MalService.fetchAllUserItems(request.username)
+                MalService.fetchAllUserItemsShared(request.username, request.force === true)
                     .then(data => sendResponse({ success: true, data: data }))
                     .catch(err => sendResponse({ success: false, error: err.message }));
-                return true; 
+                return true;
             }
 
             if (request.action === "SEARCH_ITEM") {
-                const query = encodeURIComponent(request.title);
-                Promise.all([
-                    fetch(`https://api.jikan.moe/v4/anime?q=${query}&limit=5`).then(res => res.json()).catch(() => ({ data: [] })),
-                    fetch(`https://api.jikan.moe/v4/manga?q=${query}&limit=5`).then(res => res.json()).catch(() => ({ data: [] }))
-                ])
-                .then(([animeRes, mangaRes]) => {
-                    const results = [];
-                    if (animeRes && animeRes.data) results.push(...animeRes.data.map(item => ({ ...item, type: 'anime' })));
-                    if (mangaRes && mangaRes.data) results.push(...mangaRes.data.map(item => ({ ...item, type: 'manga' })));
-                    
-                    if (results.length > 0) sendResponse({ success: true, results: results });
-                    else sendResponse({ success: false, error: "Not found" });
-                })
-                .catch(err => sendResponse({ success: false, error: err.message }));
+                MalService.searchItems(request.title, request.mediaType)
+                    .then(results => sendResponse({ success: true, results }))
+                    .catch(err => sendResponse({ success: false, error: err.message }));
+                return true;
+            }
+
+            if (request.action === "RESOLVE_CONTINUOUS") {
+                MalService.resolveContinuous(request.id, request.mediaType, request.progress)
+                    .then(data => sendResponse({ success: true, data }))
+                    .catch(err => sendResponse({ success: false, error: err.message }));
+                return true;
+            }
+
+            if (request.action === "RESOLVE_MAL_LINK") {
+                MalService.resolveManualLink(request.input, request.mediaType)
+                    .then(data => sendResponse({ success: true, data }))
+                    .catch(err => sendResponse({ success: false, error: err.message }));
                 return true;
             }
 
             if (request.action === "UPDATE_MONITORING") {
                 ReleaseMonitorService.setupAlarm();
-                ReleaseMonitorService.checkNewReleases(); 
+                ReleaseMonitorService.checkNewReleases();
                 sendResponse({ success: true });
                 return true;
             }
@@ -74,9 +77,9 @@ export class MessageHandler {
 
             if (request.action === "SYNC_LOGIN") {
                 SyncService.authenticate(true)
-                    .then(user => { 
-                        SyncService.pullFromCloud(); 
-                        sendResponse({ success: true, email: user.email }); 
+                    .then(user => {
+                        SyncService.pullFromCloud();
+                        sendResponse({ success: true, email: user.email });
                     })
                     .catch(err => sendResponse({ success: false, error: err.message }));
                 return true;

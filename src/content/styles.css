@@ -340,3 +340,20 @@
     background: transparent;
     font-style: italic;
 }
+.mal-manual-wrap { display: flex; gap: 6px; margin-bottom: 8px; }
+.mal-manual-input {
+    flex: 1; min-width: 0;
+    background: var(--mal-input-bg); border: 1px solid var(--mal-panel-border);
+    color: var(--mal-panel-text); border-radius: 4px; padding: 4px 6px;
+    font-size: 12px; outline: none;
+}
+.mal-manual-wrap .mal-mini-btn {
+    width: auto; padding: 0 10px; font-size: 12px; white-space: nowrap;
+    background: var(--mal-color-2); color: #fff;
+}
+
+.mal-unlink-btn {
+    width: 100%; margin-top: 6px; padding: 4px; background: transparent; border: none;
+    color: var(--mal-panel-text); opacity: 0.65; font-size: 11px; cursor: pointer; text-decoration: underline;
+}
+.mal-unlink-btn:hover { opacity: 1; }

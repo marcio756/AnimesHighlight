@@ -8,22 +8,11 @@ import { I18nService } from '../common/i18n.js';
 import { HighlightComponent } from './components/highlight.component.js';
 import { PanelComponent } from './components/panel.component.js';
 
-export class GlobalProgressUI {
-    static start() {
-        const bar = document.getElementById('globalProgress');
-        if (bar) bar.classList.add('loading');
-    }
-
-    static stop() {
-        const bar = document.getElementById('globalProgress');
-        if (bar) bar.classList.remove('loading');
-    }
-}
-
 export class UIManager {
     static isPanelTransparent = false;
     static currentLanguage = 'en';
     static savePanelPosition = false;
+    static autoDetectSeasons = false;
 
     /**
      * Initializes global locale context.
@@ -52,6 +41,10 @@ export class UIManager {
         this.isPanelTransparent = transparent; 
     }
     
+    static setAutoDetectSeasons(value) {
+        this.autoDetectSeasons = value;
+    }
+
     static setSavePosition(savePos) { 
         this.savePanelPosition = savePos; 
     }
@@ -63,7 +56,8 @@ export class UIManager {
         return {
             language: this.currentLanguage,
             transparent: this.isPanelTransparent,
-            savePosition: this.savePanelPosition
+            savePosition: this.savePanelPosition,
+            autoDetectSeasons: this.autoDetectSeasons
         };
     }
 
@@ -85,12 +79,12 @@ export class UIManager {
         return HighlightComponent.findCard(titleElement);
     }
 
-    static async showNotFoundPanel(itemName) {
-        await PanelComponent.showNotFound(itemName, this.getConfig());
+    static async showNotFoundPanel(itemName, onManualLink) {
+        await PanelComponent.showNotFound(itemName, this.getConfig(), onManualLink);
     }
 
-    static async showPanel(itemName, data) {
-        await PanelComponent.show(itemName, data, this.getConfig());
+    static async showPanel(itemName, data, onUnlink = null) {
+        await PanelComponent.show(itemName, data, this.getConfig(), onUnlink);
     }
 
     static hidePanel() {

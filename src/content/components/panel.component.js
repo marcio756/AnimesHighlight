@@ -61,7 +61,12 @@ export class PanelComponent {
                     </div>
                 </div>
             </div>
+            <div id="malManualWrap" class="mal-manual-wrap" style="display: none;">
+                <input type="text" id="malManualInput" class="mal-manual-input">
+                <button id="malManualBtn" class="mal-mini-btn">OK</button>
+            </div>
             <button class="mal-update-btn" id="malOpenBtn">${I18nService.get('panelOpenBtn', config.language)}</button>
+            <button class="mal-unlink-btn" id="malUnlinkBtn" style="display: none;"></button>
         `;
         document.body.appendChild(panel);
         
@@ -83,7 +88,7 @@ export class PanelComponent {
     /**
      * Triggers the "Not Found" state UI.
      */
-    static async showNotFound(itemName, config) {
+    static async showNotFound(itemName, config, onManualLink) {
         await this.create(config);
         const panel = document.getElementById('malControlPanel');
         const titleEl = document.getElementById('malPanelTitle');
@@ -111,6 +116,32 @@ export class PanelComponent {
         btn.onclick = () => {
             window.open(`https://myanimelist.net/search/all?q=${encodeURIComponent(itemName)}`, '_blank');
         };
+
+        const unlinkBtnNf = document.getElementById('malUnlinkBtn');
+        if (unlinkBtnNf) unlinkBtnNf.style.display = 'none';
+
+        const manualWrap = document.getElementById('malManualWrap');
+        const manualInput = document.getElementById('malManualInput');
+        const manualBtn = document.getElementById('malManualBtn');
+        manualInput.value = '';
+        manualInput.placeholder = I18nService.get('manualPlaceholder', config.language);
+        manualBtn.innerText = I18nService.get('manualLinkBtn', config.language);
+        manualWrap.style.display = onManualLink ? 'flex' : 'none';
+        manualBtn.disabled = false;
+        const submitManual = async () => {
+            const value = manualInput.value.trim();
+            if (!value || !onManualLink) return;
+            manualBtn.disabled = true;
+            manualBtn.innerText = '...';
+            const ok = await onManualLink(value);
+            if (!ok) {
+                manualBtn.disabled = false;
+                manualBtn.innerText = I18nService.get('manualLinkFail', config.language);
+                setTimeout(() => { manualBtn.innerText = I18nService.get('manualLinkBtn', config.language); }, 2000);
+            }
+        };
+        manualBtn.onclick = submitManual;
+        manualInput.onkeydown = (e) => { if (e.key === 'Enter') submitManual(); };
         
         panel.classList.toggle('mal-panel-transparent', config.transparent);
         panel.classList.add('visible');
@@ -119,7 +150,7 @@ export class PanelComponent {
     /**
      * Binds active list data and UI logic to the floating panel.
      */
-    static async show(itemName, data, config) {
+    static async show(itemName, data, config, onUnlink = null) {
         await this.create(config);
         const panel = document.getElementById('malControlPanel');
         const titleEl = document.getElementById('malPanelTitle');
@@ -144,6 +175,8 @@ export class PanelComponent {
         const quickDecBtn = document.getElementById('malQuickDecBtn');
         
         titleEl.innerText = itemName;
+        const manualWrapEl = document.getElementById('malManualWrap');
+        if (manualWrapEl) manualWrapEl.style.display = 'none';
         
         const mediaType = data?.type || ContextAnalyzer.guessContentType();
         const isManga = mediaType === 'manga';
@@ -151,6 +184,9 @@ export class PanelComponent {
 
         statusWrapper.style.opacity = '1';
         statusWrapper.style.pointerEvents = 'auto';
+
+        // Dados para inserir na cache local quando o anime ainda não estava na lista
+        const cacheMeta = () => ({ title: data?.rawTitle || itemName, total: data?.total || 0 });
 
         // Mapeamento unificado: Suporta tanto IDs numéricos (cache) como strings (API)
         const statusMap = { 
@@ -204,13 +240,13 @@ export class PanelComponent {
                 }, (response) => {
                     if (response && response.success) {
                         const statusId = parseInt(Object.keys(statusMap).find(key => statusMap[key] === newStatusStr));
-                        DataManager.updateCacheItem(data.id, mediaType, { status: statusId });
+                        DataManager.updateCacheItem(data.id, mediaType, { status: statusId }, cacheMeta());
                         
                         window.dispatchEvent(new CustomEvent('mal_entry_updated', {
                             detail: { id: data.id, type: mediaType, status: statusId }
                         }));
                         
-                        this.show(itemName, { ...data, status: statusId }, config);
+                        this.show(itemName, { ...data, status: statusId }, config, onUnlink);
                     } else {
                         statusWrapper.style.opacity = '1';
                         statusWrapper.style.pointerEvents = 'auto';
@@ -256,7 +292,7 @@ export class PanelComponent {
                         scoreWrapper.style.opacity = '1';
                         scoreWrapper.style.pointerEvents = 'auto';
                         if (response && response.success) {
-                            DataManager.updateCacheItem(data.id, mediaType, { score: newScore });
+                            DataManager.updateCacheItem(data.id, mediaType, { score: newScore }, cacheMeta());
                             data.score = newScore;
                             scoreOptions.querySelectorAll('.mal-option').forEach(o => o.classList.remove('selected'));
                             opt.classList.add('selected');
@@ -310,7 +346,7 @@ export class PanelComponent {
                 currentInputEl.disabled = false;
 
                 if (response && response.success) {
-                    DataManager.updateCacheItem(data.id, mediaType, { progress: finalVal });
+                    DataManager.updateCacheItem(data.id, mediaType, { progress: finalVal }, cacheMeta());
                     
                     window.dispatchEvent(new CustomEvent('mal_entry_updated', {
                         detail: { id: data.id, type: mediaType, progress: finalVal }
@@ -430,6 +466,11 @@ export class PanelComponent {
             progressWrap.style.display = 'none';
         }
         
+        const unlinkBtn = document.getElementById('malUnlinkBtn');
+        unlinkBtn.style.display = onUnlink ? 'block' : 'none';
+        unlinkBtn.innerText = I18nService.get('manualUnlinkBtn', config.language);
+        unlinkBtn.onclick = () => { if (onUnlink) onUnlink(); };
+
         btn.innerText = I18nService.get('panelOpenBtn', config.language);
         btn.onclick = () => {
             if (data && data.id) {
