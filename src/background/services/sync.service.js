@@ -155,7 +155,7 @@ export class SyncService {
         });
     }
 
-    static async pullFromCloud() {
+    static async pullFromCloud(isRetry = false) {
         try {
             const auth = await this.authenticate(false);
             if (!auth) return; // Se não estiver logado, sai limpo
@@ -165,12 +165,19 @@ export class SyncService {
                 headers: { 'Authorization': `Bearer ${auth.idToken}` }
             });
 
+            // Token expirado: renovar a sessão uma vez e repetir
+            if (res.status === 401 && !isRetry) {
+                this.currentUser = null;
+                return this.pullFromCloud(true);
+            }
+
             if (!res.ok) {
                 if (res.status === 404) {
                     console.log("[SyncService] No cloud profile found. Pushing local data to cloud instead.");
                     return this.pushToCloud();
                 }
-                throw new Error("Failed to fetch document from Firestore");
+                const detail = await res.text().catch(() => '');
+                throw new Error(`Firestore respondeu ${res.status}: ${detail.slice(0, 200)}`);
             }
 
             const data = await res.json();
@@ -213,8 +220,9 @@ export class SyncService {
                 body: JSON.stringify(documentBody)
             });
 
+            let finalRes = res;
             if (res.status === 409) {
-                await fetch(`${this.FIRESTORE_URL}/users/${auth.localId}`, {
+                finalRes = await fetch(`${this.FIRESTORE_URL}/users/${auth.localId}`, {
                     method: 'PATCH',
                     headers: {
                         'Authorization': `Bearer ${auth.idToken}`,
@@ -222,6 +230,11 @@ export class SyncService {
                     },
                     body: JSON.stringify(documentBody)
                 });
+            }
+
+            if (!finalRes.ok) {
+                const detail = await finalRes.text().catch(() => '');
+                throw new Error(`Firestore respondeu ${finalRes.status}: ${detail.slice(0, 200)}`);
             }
 
             console.log("[SyncService] Data successfully pushed to cloud.");
