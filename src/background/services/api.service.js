@@ -88,10 +88,13 @@ export class ActiveItemsSynonymFetcher {
             let consecutiveFailures = 0;
             let processed = 0;
 
-            const persist = () => chrome.storage.local.set({
-                mal_synonyms_cache: cache,
-                mal_relations_cache: relationsCache
-            });
+            const persist = async () => {
+                const latest = await new Promise(resolve => chrome.storage.local.get(['mal_synonyms_cache', 'mal_relations_cache'], res => resolve(res || {})));
+                await chrome.storage.local.set({
+                    mal_synonyms_cache: { ...(latest.mal_synonyms_cache || {}), ...cache },
+                    mal_relations_cache: { ...(latest.mal_relations_cache || {}), ...relationsCache }
+                });
+            };
 
             for (const item of activeItems) {
                 if (consecutiveFailures >= 3) {
@@ -142,14 +145,14 @@ export class ActiveItemsSynonymFetcher {
 
                     chrome.storage.local.set({ [syncKey]: true });
                     consecutiveFailures = 0;
-                    if (updated && ++processed % 10 === 0) persist(); // Guardar progresso (o service worker pode adormecer)
+                    if (updated && ++processed % 10 === 0) await persist(); // Guardar progresso (o service worker pode adormecer)
                 } catch (error) {
                     consecutiveFailures++;
                     console.warn(`[ActiveItemsSynonymFetcher] Falha ao buscar ${item.id}: ${error.message}`);
                 }
             }
 
-            if (updated) persist();
+            if (updated) await persist();
         } catch (globalError) {
             console.warn("[ActiveItemsSynonymFetcher] Global silent error:", globalError);
         } finally {

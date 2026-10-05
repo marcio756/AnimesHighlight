@@ -105,8 +105,8 @@ export class PopupUI {
 
     // --- Component Bindings ---
 
-    static renderSitesList(sites, listEl, emptyEl, callbacks) {
-        SiteListComponent.render(sites, listEl, emptyEl, callbacks);
+    static renderSitesList(sites, listEl, emptyEl, callbacks, lang = 'en') {
+        SiteListComponent.render(sites, listEl, emptyEl, callbacks, lang);
     }
 
     static updateSiteFilterDropdown(sites, optionsContainerEl, labelEl, currentLang, currentValue, onChangeCallback) {

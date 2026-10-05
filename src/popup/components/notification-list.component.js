@@ -40,7 +40,7 @@ export class NotificationListComponent {
             deleteBtn.className = 'delete-notif-btn';
             deleteBtn.setAttribute('data-index', originalIndex);
             deleteBtn.style.cssText = 'position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;';
-            deleteBtn.title = 'Remover';
+            deleteBtn.title = I18nService.get('removeItem', currentLang);
             deleteBtn.innerHTML = closeIconSVG; // Seguro, string estática SVG
             
             const contentDiv = document.createElement('div');
@@ -126,7 +126,7 @@ export class NotificationListComponent {
                     if (onUpdateLogs) onUpdateLogs(logs);
                 }
 
-                window.open(finalUrl, '_blank');
+                if (/^https?:///i.test(finalUrl)) window.open(finalUrl, '_blank', 'noopener');
                 button.textContent = btnOpenText;
                 button.style.opacity = "1";
                 button.style.pointerEvents = "auto";

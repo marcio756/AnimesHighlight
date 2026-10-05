@@ -2,6 +2,7 @@
 
 import { ProgressExtractor } from '../utils.js';
 import { DataManager } from '../data.js';
+import { sendMessage } from '../messaging.js';
 
 export class ProgressService {
     constructor() {
@@ -46,7 +47,7 @@ export class ProgressService {
         if (progressInput) progressInput.value = finalNum;
 
         // Processar no background
-        chrome.runtime.sendMessage({
+        sendMessage({
             action: "UPDATE_PROGRESS",
             id: match.id,
             mediaType: currentMediaType,

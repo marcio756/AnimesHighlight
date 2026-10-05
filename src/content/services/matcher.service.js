@@ -73,7 +73,8 @@ export class MatcherService {
             const now = Date.now();
             const TTL_24H = 24 * 60 * 60 * 1000;
 
-            if (cacheData && cacheData.timestamp && (now - cacheData.timestamp < TTL_24H)) {
+            const listSize = this.globalMediaMap.size;
+            if (cacheData && cacheData.timestamp && cacheData.listSize === listSize && (now - cacheData.timestamp < TTL_24H)) {
                 // Restore from cache
                 this.seasonChains = new Map(JSON.parse(cacheData.data));
                 return;
@@ -86,6 +87,7 @@ export class MatcherService {
             chrome.storage.local.set({
                 [cacheKey]: {
                     timestamp: now,
+                    listSize,
                     data: JSON.stringify(Array.from(this.seasonChains.entries()))
                 }
             }, () => {

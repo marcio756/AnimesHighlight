@@ -10,6 +10,15 @@ const DICTIONARY = {
         tabMonitor: "Monitor",
         tabHistory: "History",
         tabSettings: "Settings",
+        lblSettingsGeneral: "General & Floating Panel",
+        usernamePlaceholder: "e.g. your MAL username",
+        themeToggle: "Toggle theme",
+        removeSite: "Remove site",
+        removeItem: "Remove",
+        panelLoading: "Loading...",
+        panelDragHint: "Drag to move",
+        statusSyncFail: "Could not sync your list. Is the profile public?",
+        footerText: "Universal MAL Highlighter",
         
         lblUsername: "MyAnimeList Username:",
         btnVerifySave: "Verify & Save",
@@ -34,7 +43,7 @@ const DICTIONARY = {
         syncWarning: "You can use the extension normally without logging in, but if you uninstall or change devices, your data and site settings will be lost.",
         syncLoggedIn: "Logged in",
         syncNotLoggedIn: "Not logged in (Local only)",
-        btnLogin: "Login",
+        btnLogin: "Iniciar sessão",
         btnLogout: "Logout",
 
         lblEnablePanel: "Show Floating Panel",
@@ -42,20 +51,16 @@ const DICTIONARY = {
         lblSavePanelPos: "Save Panel Drag Position",
         lblAutoUpdate: "Auto-Update Progress (URL Sync)",
         lblAutoSeasons: "Auto-Detect Next Season",
-        lblAutoDetectSeasons: "Auto-Detect Seasons from Episode Number",
         lblHighlights: "Statuses to Highlight:",
         lblColors: "Status Colors:",
         
         btnSaveSettings: "Save Settings",
         
         lblNextCheck: "Next check in:",
-        lblMinutes: "minutes",
         lblNow: "Checking now...",
         lblNotScheduled: "Monitoring disabled.",
         
         statusChecking: "Checking...",
-        statusCheckingMultiple: "Checking multiple sites...",
-        statusNotInList: "NOT IN LIST",
         statusAddToList: "Add to List...",
         statusSaved: "Saved successfully!",
         statusErrorUser: "User not found or private.",
@@ -68,16 +73,13 @@ const DICTIONARY = {
         manualLinkBtn: "Link",
         manualLinkFail: "Not found",
         manualUnlinkBtn: "Wrong anime? Unlink",
-        btnQuickAdd: "Quick Add +1",
         
-        notifTitle: "MAL Highlighter Monitor",
         notifNew: "New Release",
-        notifMultiple: "New Releases Available!",
         notifBtnWatch: "Watch Now",
         notifBtnMarkSeen: "Mark as Seen",
         notifBtnSearching: "Searching...",
         notifBtnOpen: "Open",
-        notifMarkedSeen: "Successfully marked {title} progress {ep} as seen.",
+        notifMarkedSeen: "Marked {title} #{ep} as seen.",
 
         statusWatching: "WATCHING",
         statusReading: "READING",
@@ -99,11 +101,20 @@ const DICTIONARY = {
         profileWelcome: "Welcome, {user}!"
     },
     pt: {
-        appTitle: "Realçador MAL",
+        appTitle: "MAL Highlighter",
         tabProfile: "Perfil",
         tabMonitor: "Monitor",
         tabHistory: "Histórico",
         tabSettings: "Definições",
+        lblSettingsGeneral: "Geral e Painel Flutuante",
+        usernamePlaceholder: "ex.: o teu utilizador do MAL",
+        themeToggle: "Alternar tema",
+        removeSite: "Remover site",
+        removeItem: "Remover",
+        panelLoading: "A carregar...",
+        panelDragHint: "Arrastar para mover",
+        statusSyncFail: "Não foi possível sincronizar a lista. O perfil é público?",
+        footerText: "Universal MAL Highlighter",
         
         lblUsername: "Nome de Utilizador (MyAnimeList):",
         btnVerifySave: "Verificar e Guardar",
@@ -124,32 +135,28 @@ const DICTIONARY = {
         langEn: "English",
         langPt: "Português",
 
-        lblCloudSync: "Sincronização Cloud",
-        syncWarning: "Podes usar a extensão normalmente sem fazer login, mas se a desinstalares ou mudares de dispositivo, vais perder as tuas definições e histórico.",
+        lblCloudSync: "Sincronização e Cópia de Segurança",
+        syncWarning: "Podes usar a extensão normalmente sem iniciar sessão, mas se a desinstalares ou mudares de dispositivo, vais perder as tuas definições e o histórico.",
         syncLoggedIn: "Sessão iniciada",
         syncNotLoggedIn: "Sem sessão iniciada (Apenas local)",
         btnLogin: "Login",
         btnLogout: "Sair",
         
         lblEnablePanel: "Ativar Painel Flutuante",
-        lblEnableTransparency: "Ativar Transparência no Painel",
+        lblEnableTransparency: "Painel Transparente (passa o rato para ver)",
         lblSavePanelPos: "Guardar Posição do Painel",
-        lblAutoUpdate: "Atualizar Progresso Autom.",
-        lblAutoSeasons: "Detetar Próxima Temporada",
-        lblAutoDetectSeasons: "Detetar Temporadas Auto. pela Numeração",
+        lblAutoUpdate: "Atualizar Progresso Automaticamente (pelo URL)",
+        lblAutoSeasons: "Detetar Próxima Temporada Automaticamente",
         lblHighlights: "Estados a Destacar:",
         lblColors: "Cores dos Estados:",
         
         btnSaveSettings: "Guardar Definições",
         
         lblNextCheck: "Próxima verificação em:",
-        lblMinutes: "minutos",
         lblNow: "A verificar agora...",
         lblNotScheduled: "Monitorização desativada.",
         
         statusChecking: "A verificar...",
-        statusCheckingMultiple: "A verificar múltiplos sites...",
-        statusNotInList: "NÃO ESTÁ NA LISTA",
         statusAddToList: "Adicionar à Lista...",
         statusSaved: "Guardado com sucesso!",
         statusErrorUser: "Utilizador não encontrado ou privado.",
@@ -162,25 +169,22 @@ const DICTIONARY = {
         manualLinkBtn: "Associar",
         manualLinkFail: "Não encontrado",
         manualUnlinkBtn: "Anime errado? Desassociar",
-        btnQuickAdd: "Adicionar Rápido +1",
         
-        notifTitle: "Monitor do Realçador MAL",
         notifNew: "Novo Lançamento",
-        notifMultiple: "Novos Lançamentos Disponíveis!",
-        notifBtnWatch: "Assistir Agora",
+        notifBtnWatch: "Ver Agora",
         notifBtnMarkSeen: "Marcar como Visto",
         notifBtnSearching: "A procurar...",
         notifBtnOpen: "Abrir",
-        notifMarkedSeen: "Marcaste {title} cap/ep {ep} como visto com sucesso.",
+        notifMarkedSeen: "Marcaste {title} (n.º {ep}) como visto.",
 
         statusWatching: "A VER",
         statusReading: "A LER",
         statusCompleted: "CONCLUÍDO",
         statusOnHold: "EM ESPERA",
-        statusDropped: "DESISTIU",
+        statusDropped: "ABANDONADO",
         statusPlanned: "PLANEADO",
 
-        welcomeTitle: "Bem-vindo ao Realçador MAL",
+        welcomeTitle: "Bem-vindo ao MAL Highlighter",
         welcomeSubtitle: "Vamos configurar a tua extensão em dois passos simples.",
         welcomeStep1Title: "1. Conecta o teu MyAnimeList",
         welcomeStep1Desc: "Clica no ícone da extensão na barra do teu navegador, insere o teu nome de utilizador do MyAnimeList e clica em 'Verificar e Guardar'.",
@@ -198,7 +202,7 @@ export class I18nService {
     static async getCurrentLang() {
         return new Promise((resolve) => {
             chrome.storage.local.get(['extensionLang'], (res) => {
-                resolve(res.extensionLang || 'en');
+                resolve(res.extensionLang || ((chrome.i18n && chrome.i18n.getUILanguage().toLowerCase().startsWith('pt')) ? 'pt' : 'en'));
             });
         });
     }
@@ -212,6 +216,12 @@ export class I18nService {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
             if (key) el.innerText = this.get(key, lang);
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            el.placeholder = this.get(el.getAttribute('data-i18n-placeholder'), lang);
+        });
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            el.title = this.get(el.getAttribute('data-i18n-title'), lang);
         });
     }
 }

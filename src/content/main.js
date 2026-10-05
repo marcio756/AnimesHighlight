@@ -1,8 +1,9 @@
 // src/content/main.js
 
-import { PerformanceGuard, ContextAnalyzer, TextNormalizer, DynamicDebouncer, UI_BLOCKLIST, Matcher } from './utils.js';
+import { PerformanceGuard, ContextAnalyzer, TextNormalizer, DynamicDebouncer, isUiNoise, Matcher } from './utils.js';
 import { SynonymDictionary, ManualMappingManager, DataManager } from './data.js';
 import { UIManager } from './ui.js';
+import { sendMessage } from './messaging.js';
 import { ProgressService } from './services/progress.service.js';
 import { MatcherService } from './services/matcher.service.js';
 import { SearchService } from './services/search.service.js';
@@ -32,7 +33,7 @@ class MalController {
             await SynonymDictionary.init(); 
             await ManualMappingManager.init();
             
-            const settings = await chrome.storage.local.get();
+            const settings = await chrome.storage.local.get(['panelEnabled', 'autoUpdateProgress', 'autoDetectSeasons', 'highlightStatuses', 'panelTransparent', 'savePanelPos']);
             this.isPanelEnabled = settings.panelEnabled !== false; 
             this.autoUpdateProgress = settings.autoUpdateProgress === true;
             this.autoDetectSeasons = settings.autoDetectSeasons === true;
@@ -109,8 +110,7 @@ class MalController {
         let text = element.getAttribute('title') || element.getAttribute('aria-label') || element.innerText || "";
         if (text.length < 3) return;
         
-        const lowerText = text.toLowerCase();
-        if (UI_BLOCKLIST.some(term => lowerText.includes(term))) return;
+        if (isUiNoise(text)) return;
 
         const match = this.matcherService.findMatch(text, currentMediaType);
 
@@ -147,7 +147,7 @@ class MalController {
     analyzeUrlForPanel(currentMediaType, panelVisible) {
         const { match, urlTitle } = this.matcherService.matchFromUrl(currentMediaType);
         
-        if (UI_BLOCKLIST.some(term => urlTitle && TextNormalizer.normalize(urlTitle).includes(term))) return false;
+        if (urlTitle && isUiNoise(urlTitle)) return false;
 
         if (match) {
             this.progressService.attemptAutoUpdate(match, currentMediaType, this.autoUpdateProgress, this.autoDetectSeasons, this.isPanelEnabled);
@@ -191,7 +191,7 @@ class MalController {
      */
     async linkManually(cleanQuery, input, mediaType) {
         const response = await new Promise(resolve =>
-            chrome.runtime.sendMessage({ action: "RESOLVE_MAL_LINK", input, mediaType }, resolve));
+            sendMessage({ action: "RESOLVE_MAL_LINK", input, mediaType }, resolve));
         if (chrome.runtime.lastError || !response || !response.success) return false;
 
         const { id, type, title, total } = response.data;

@@ -1,6 +1,7 @@
 // src/content/data.js
 
 import { TextNormalizer, CONFIG } from './utils.js';
+import { sendMessage } from './messaging.js';
 
 /**
  * Storage Abstraction with LastError Protection
@@ -109,7 +110,10 @@ export class SynonymDictionary {
         try {
             if (!alias || !officialTitle) return;
             this.cache[alias] = officialTitle;
-            SafeStorage.set({ mal_synonyms_cache: this.cache });
+            // Merge com o que já está guardado (o service worker também escreve aqui)
+            SafeStorage.get(['mal_synonyms_cache']).then(res => {
+                SafeStorage.set({ mal_synonyms_cache: { ...(res.mal_synonyms_cache || {}), [alias]: officialTitle } });
+            });
         } catch (error) {
             console.warn("[SynonymDictionary] Silent save error:", error);
         }
@@ -124,10 +128,10 @@ export class DataManager {
     static async getUsername() {
         try {
             const result = await SafeStorage.get(['malUsername']);
-            return result.malUsername || 'marcio756';
+            return result.malUsername || null;
         } catch (error) {
             console.warn("[DataManager] Silent getUsername error:", error);
-            return 'marcio756';
+            return null;
         }
     }
 
@@ -182,6 +186,7 @@ export class DataManager {
     static async getUserList() {
         try {
             const USERNAME = await this.getUsername();
+            if (!USERNAME) return new Map(); // Sem utilizador configurado: nada a destacar (nunca assumir a lista de outra pessoa)
             const res = await SafeStorage.get([CONFIG.CACHE_KEY]);
             const cachedData = res[CONFIG.CACHE_KEY];
             let staleMap = null;
@@ -199,7 +204,7 @@ export class DataManager {
             }
 
             return new Promise((resolve) => {
-                chrome.runtime.sendMessage({ action: "FETCH_MAL_LIST", username: USERNAME }, async (response) => {
+                sendMessage({ action: "FETCH_MAL_LIST", username: USERNAME }, async (response) => {
                     if (chrome.runtime.lastError) console.warn("[DataManager] Message error:", chrome.runtime.lastError);
 
                     const newMap = new Map();

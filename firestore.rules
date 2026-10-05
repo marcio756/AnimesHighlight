@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// Cada utilizador só lê/escreve o seu próprio documento users/{uid}; tudo o resto é negado.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+                            && request.auth.uid == userId
+                            && request.resource.data.keys().hasOnly(['settings', 'lastUpdated'])
+                            && request.resource.data.settings is string
+                            && request.resource.data.settings.size() < 500000;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

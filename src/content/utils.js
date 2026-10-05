@@ -32,6 +32,16 @@ export const UI_BLOCKLIST = [
     "shorts", "feed", "live", "streams", "inicio", "home"
 ];
 
+// Ruído de interface: palavras soltas só contam se forem o texto INTEIRO do elemento (ex.: um botão "Online"),
+// senão títulos reais como "Sword Art Online" ou "Love Live!" seriam bloqueados. Frases com espaços contam por inclusão.
+const NOISE_WORDS = new Set(UI_BLOCKLIST.filter(t => !t.includes(" ")));
+const NOISE_PHRASES = UI_BLOCKLIST.filter(t => t.includes(" "));
+const NOISE_NUMBERED = /^(episodios?|episode|capitulos?|chapter|ep|cap)\s*\d*$/;
+export const isUiNoise = (text) => {
+    const clean = String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    return NOISE_WORDS.has(clean) || NOISE_NUMBERED.test(clean) || NOISE_PHRASES.some(p => clean.includes(p));
+};
+
 export const STATUS_MAP = {
     1: { class: 'mal-watching', labelKey: 'statusWatching', color: '#2db039' }, 
     2: { class: 'mal-completed', labelKey: 'statusCompleted', color: '#26448f' },
@@ -143,7 +153,12 @@ export class PerformanceGuard {
         const url = window.location.href.toLowerCase();
         
         // Bloqueio explícito de plataformas de conteúdo massivo não relacionadas para poupar CPU
-        if (CONFIG.BLOCKED_DOMAINS.some(domain => url.includes(domain))) {
+        // Compara só o hostname: um "x.com" dentro de "animex.com" ou num parâmetro do URL não pode bloquear a página.
+        const host = window.location.hostname.toLowerCase();
+        const isBlockedHost = CONFIG.BLOCKED_DOMAINS.some(domain => domain.endsWith('.')
+            ? (host.startsWith(domain) || host.includes('.' + domain))
+            : (host === domain || host.endsWith('.' + domain)));
+        if (isBlockedHost) {
             console.log("[MAL Highlighter] Script idle: Generic or blocked domain detected.");
             return false;
         }

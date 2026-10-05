@@ -15,7 +15,7 @@ export class SyncService {
     static SYNCABLE_KEYS = [
         'extensionLang', 'panelEnabled', 'panelTransparent',
         'savePanelPos', 'autoUpdateProgress', 'autoDetectSeasons', 'highlightStatuses',
-        'customColors', 'manualMappings', 'monitoredSites', 'notificationLog', 'seenEpisodes'
+        'customColors', 'manualMappings', 'monitoredSites', 'malUsername'
     ];
 
     static debounceTimer = null;
@@ -31,7 +31,7 @@ export class SyncService {
         return new Promise((resolve, reject) => {
             const clientId = chrome.runtime.getManifest().oauth2.client_id;
             const redirectUri = chrome.identity.getRedirectURL();
-            const nonce = Math.random().toString(36).substring(2, 15);
+            const nonce = crypto.randomUUID();
 
             const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
                 `client_id=${clientId}&` +
@@ -182,7 +182,11 @@ export class SyncService {
 
             const data = await res.json();
             if (data.fields && data.fields.settings && data.fields.settings.stringValue) {
-                const cloudSettings = JSON.parse(data.fields.settings.stringValue);
+                const parsed = JSON.parse(data.fields.settings.stringValue);
+                const cloudSettings = {};
+                for (const key of this.SYNCABLE_KEYS) {
+                    if (parsed && Object.prototype.hasOwnProperty.call(parsed, key)) cloudSettings[key] = parsed[key];
+                }
 
                 this.isPullingDown = true;
                 await chrome.storage.local.set(cloudSettings);
@@ -195,7 +199,7 @@ export class SyncService {
         }
     }
 
-    static async pushToCloud() {
+    static async pushToCloud(isRetry = false) {
         if (this.isPullingDown) return;
 
         try {
@@ -230,6 +234,11 @@ export class SyncService {
                     },
                     body: JSON.stringify(documentBody)
                 });
+            }
+
+            if (finalRes.status === 401 && !isRetry) {
+                this.currentUser = null;
+                return this.pushToCloud(true);
             }
 
             if (!finalRes.ok) {

@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let currentLang = await I18nService.getCurrentLang();
     I18nService.translateDOM(currentLang);
+    const versionEl = document.getElementById('appVersion');
+    if (versionEl) versionEl.textContent = chrome.runtime.getManifest().version;
 
     const themeToggleBtn = document.getElementById('themeToggleBtn');
     const tabs = document.querySelectorAll('.tab-btn');
@@ -116,7 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const saveSitesState = async (triggerAlarmRefresh = true) => {
         await StorageService.saveSites(globalSites);
-        PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+        PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks, currentLang);
         updateFilter(); 
         if (triggerAlarmRefresh) ApiService.triggerMonitorUpdate();
     };
@@ -145,7 +147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         globalSites = data.sites;
         globalLogs = data.logs;
         
-        PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+        PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks, currentLang);
         updateFilter(); 
         renderLogs();
         PopupUI.renderAlarmFeedback('nextCheckDisplay', currentLang);
@@ -230,7 +232,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!urlRaw) return;
 
         try {
-            const urlObj = new URL(urlRaw.startsWith('http') ? urlRaw : `https://${urlRaw}`);
+            const urlObj = new URL(/^https?:///i.test(urlRaw) ? urlRaw : `https://${urlRaw}`);
+            if (!['http:', 'https:'].includes(urlObj.protocol) || !urlObj.hostname.includes('.') && urlObj.hostname !== 'localhost') throw new Error('Invalid URL');
             const formattedUrl = urlObj.href;
             
             if (globalSites.some(s => s.url === formattedUrl)) {
@@ -238,7 +241,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             globalSites.push({ id: 'temp', isSkeleton: true });
-            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks);
+            PopupUI.renderSitesList(globalSites, monitoredSitesList, emptySitesState, siteActionCallbacks, currentLang);
             if(inputNewSiteUrl) inputNewSiteUrl.value = "";
 
             setTimeout(() => {
@@ -321,13 +324,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 saveProfileBtn.disabled = false;
                 chrome.storage.local.remove(['mal_v36_full_list', 'mal_season_chain_cache']);
             } else {
-                throw new Error('Falha ao sincronizar lista');
+                throw new Error('List sync failed');
             }
         } catch (error) {
             ProgressService.stop();
             if(profileSkeleton) profileSkeleton.style.display = 'none';
             if(profileArea && avatar?.getAttribute('src')) profileArea.style.display = 'flex';
-            PopupUI.updateStatus(statusProfile, I18nService.get('statusErrorUser', currentLang), "error");
+            PopupUI.updateStatus(statusProfile, I18nService.get(error && error.message === 'User not found' ? 'statusErrorUser' : 'statusSyncFail', currentLang), "error");
             saveProfileBtn.disabled = false;
         }
     });

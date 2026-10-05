@@ -6,8 +6,8 @@
  */
 export class AuthService {
     static CLIENT_ID = 'ea88ed2de2dce587ff8e3e5849c3cf9f';
-    static CLIENT_SECRET = 'c892f9cf267d04c669a21529670913ab2db2c8c3968a4dcfa9d7075ca2c38a0f';
-    
+    // App MAL do tipo "other" (cliente público): usa PKCE e NÃO tem client_secret — nunca colocar um secret neste ficheiro.
+
     /**
      * Generates a random string for PKCE verification
      * @param {number} length - The length of the string
@@ -33,7 +33,6 @@ export class AuthService {
         try {
             const tokenPayload = {
                 client_id: this.CLIENT_ID,
-                client_secret: this.CLIENT_SECRET,
                 grant_type: 'refresh_token',
                 refresh_token: refreshToken
             };
@@ -77,6 +76,15 @@ export class AuthService {
      * @returns {Promise<string>} The access token required for write actions
      */
     static async getAccessToken() {
+        if (!this.pendingToken) {
+            this.pendingToken = this.requestAccessToken().finally(() => { this.pendingToken = null; });
+        }
+        return this.pendingToken;
+    }
+
+    static pendingToken = null;
+
+    static requestAccessToken() {
         return new Promise((resolve, reject) => {
             chrome.storage.local.get(['mal_access_token', 'mal_refresh_token', 'mal_token_expires_at'], async (res) => {
                 
@@ -97,6 +105,7 @@ export class AuthService {
                 
                 // 2. Perform full interactive login if no token or refresh failed
                 const codeVerifier = this.generateRandomString(128);
+                const state = this.generateRandomString(32);
                 const redirectUri = chrome.identity.getRedirectURL();
                 
                 console.log("[Auth] Redirect URI em uso:", redirectUri);
@@ -107,6 +116,7 @@ export class AuthService {
                         client_id: this.CLIENT_ID,
                         code_challenge: codeVerifier,
                         code_challenge_method: 'plain',
+                        state: state,
                         redirect_uri: redirectUri
                     }).toString();
 
@@ -138,6 +148,10 @@ export class AuthService {
                         return reject(new Error(`O MyAnimeList bloqueou o acesso: ${malError}`));
                     }
 
+                    if (urlParams.get('state') !== state) {
+                        return reject(new Error('Resposta de autenticação inválida (state).'));
+                    }
+
                     const code = urlParams.get('code');
 
                     if (!code) {
@@ -147,7 +161,6 @@ export class AuthService {
                     try {
                         const tokenPayload = {
                             client_id: this.CLIENT_ID,
-                            client_secret: this.CLIENT_SECRET,
                             code: code,
                             code_verifier: codeVerifier,
                             grant_type: 'authorization_code',

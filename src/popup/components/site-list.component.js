@@ -3,7 +3,7 @@
 import { I18nService } from '../../common/i18n.js';
 
 export class SiteListComponent {
-    static render(sites, listEl, emptyEl, callbacks) {
+    static render(sites, listEl, emptyEl, callbacks, lang = 'en') {
         listEl.innerHTML = ""; // Limpeza do contentor base
         
         if (!sites || sites.length === 0) {
@@ -66,7 +66,7 @@ export class SiteListComponent {
             const delBtn = document.createElement('button');
             delBtn.className = 'btn-icon delete-site';
             delBtn.setAttribute('data-id', site.id);
-            delBtn.title = 'Remove Site';
+            delBtn.title = I18nService.get('removeSite', lang);
             delBtn.style.cssText = 'border:none; background:transparent; cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;';
             delBtn.innerHTML = trashIconSVG; // Estático
             

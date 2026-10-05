@@ -6,6 +6,7 @@
  */
 import { TextNormalizer, Matcher } from '../utils.js';
 import { SynonymDictionary, ManualMappingManager } from '../data.js';
+import { sendMessage } from '../messaging.js';
 
 export class SearchService {
     /**
@@ -30,7 +31,7 @@ export class SearchService {
         }
 
         return new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: "SEARCH_ITEM", title: cleanQuery, mediaType: currentMediaType }, (response) => {
+            sendMessage({ action: "SEARCH_ITEM", title: cleanQuery, mediaType: currentMediaType }, (response) => {
                 let bestMatch = null;
                 let finalStatus = null;
                 let finalType = null;

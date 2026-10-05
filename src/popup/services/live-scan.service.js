@@ -68,7 +68,9 @@ export class LiveScanService {
             console.groupEnd();
 
             if (bestScore > 0) {
-                const finalUrl = new URL(bestHref, targetUrl).href;
+                const resolved = new URL(bestHref, targetUrl);
+                if (!['http:', 'https:'].includes(resolved.protocol)) return targetUrl;
+                const finalUrl = resolved.href;
                 console.log(`✅ Sucesso! Vencedor ao vivo: ${finalUrl}`);
                 return finalUrl;
             } else {

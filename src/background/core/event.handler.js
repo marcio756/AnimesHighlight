@@ -36,12 +36,16 @@ export class EventHandler {
         });
     }
 
+    static isSafeUrl(url) {
+        try { return ['http:', 'https:'].includes(new URL(url).protocol); } catch (e) { return false; }
+    }
+
     static registerNotifications() {
         // Clique no corpo da notificação
         chrome.notifications.onClicked.addListener((notificationId) => {
             chrome.storage.local.get(['notificationMeta'], (res) => {
                 const meta = res.notificationMeta && res.notificationMeta[notificationId];
-                if (meta && meta.monitorUrl) chrome.tabs.create({ url: meta.monitorUrl });
+                if (meta && this.isSafeUrl(meta.monitorUrl)) chrome.tabs.create({ url: meta.monitorUrl });
             });
             chrome.notifications.clear(notificationId);
         });
@@ -53,7 +57,7 @@ export class EventHandler {
                 if (!meta) return;
 
                 if (buttonIndex === 0) {
-                    if (meta.monitorUrl) chrome.tabs.create({ url: meta.monitorUrl });
+                    if (this.isSafeUrl(meta.monitorUrl)) chrome.tabs.create({ url: meta.monitorUrl });
                 } else if (buttonIndex === 1) {
                     const lang = await I18nService.getCurrentLang();
                     const field = meta.type === 'anime' ? 'num_watched_episodes' : 'num_chapters_read';
@@ -64,7 +68,7 @@ export class EventHandler {
                             msg = msg.replace('{title}', meta.title).replace('{ep}', meta.nextEp);
 
                             chrome.notifications.create({
-                                type: 'basic', iconUrl: 'icon.png',
+                                type: 'basic', iconUrl: 'icons/icon128.png',
                                 title: 'MAL Highlighter',
                                 message: msg, priority: 1
                             });

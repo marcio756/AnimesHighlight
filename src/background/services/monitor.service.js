@@ -168,8 +168,9 @@ export class ReleaseMonitorService {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), 8000); // Strict 8s limit
         try {
-            const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+            const response = await fetch(url, { signal: controller.signal, cache: "no-store", credentials: "omit" });
             clearTimeout(id);
+            if (!response.ok) return "";
             return await response.text();
         } catch (e) {
             console.warn(`[Monitor] Fetch timeout or error for ${url}`);
@@ -250,9 +251,10 @@ export class ReleaseMonitorService {
             }
 
             try {
-                return new URL(bestHref, fallbackUrl).href;
+                const resolved = new URL(bestHref, fallbackUrl);
+                return ['http:', 'https:'].includes(resolved.protocol) ? resolved.href : fallbackUrl;
             } catch (e) {
-                return bestHref.startsWith('http') ? bestHref : fallbackUrl;
+                return fallbackUrl;
             }
         } catch (e) {
             return null;
@@ -280,7 +282,7 @@ export class ReleaseMonitorService {
 
                 chrome.notifications.create(notifId, {
                     type: 'basic',
-                    iconUrl: '/icon.png',
+                    iconUrl: 'icons/icon128.png',
                     title: I18nService.get('notifNew', lang),
                     message: message,
                     priority: 2,

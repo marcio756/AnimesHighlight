@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <title>MAL Highlighter</title>
     <script src="../common/theme-loader.js"></script>
     <link rel="stylesheet" href="popup.css">
 </head>
@@ -11,7 +12,7 @@
     <div class="header">
         <div class="header-top">
             <h3 data-i18n="appTitle">MAL Highlighter</h3>
-            <button id="themeToggleBtn" class="theme-btn" title="Alternar Tema">🌙</button>
+            <button id="themeToggleBtn" class="theme-btn" data-i18n-title="themeToggle" title="Toggle theme">🌙</button>
         </div>
         <div class="tabs">
             <button class="tab-btn active" data-tab="tab-profile" data-i18n="tabProfile">Profile</button>
@@ -25,7 +26,7 @@
         <div id="tab-profile" class="tab-pane active">
             <div class="input-group">
                 <label data-i18n="lblUsername">MyAnimeList Username:</label>
-                <input type="text" id="username" placeholder="e.g. marcio756">
+                <input type="text" id="username" data-i18n-placeholder="usernamePlaceholder" placeholder="e.g. your MAL username" maxlength="16" autocomplete="off" spellcheck="false">
             </div>
             <button id="saveBtn" class="action-btn" data-i18n="btnVerifySave">Verify & Save</button>
             
@@ -102,7 +103,7 @@
 
             <div class="settings-card">
                 <div class="settings-header">
-                    <span>Geral & Painel Flutuante</span>
+                    <span data-i18n="lblSettingsGeneral">General & Floating Panel</span>
                     <span class="chevron">▼</span>
                 </div>
                 <div class="settings-content">
@@ -215,9 +216,8 @@
         </div>
     </div>
     
-    <div class="footer">Universal Version 2.0 - Premium Edition</div>
+    <div class="footer"><span data-i18n="footerText">Universal MAL Highlighter</span> v<span id="appVersion"></span></div>
     
-    <script type="module" src="../common/i18n.js"></script>
     <script type="module" src="ui.js"></script>
     <script type="module" src="main.js"></script>
 </body>

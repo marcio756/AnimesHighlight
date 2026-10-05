@@ -1,6 +1,7 @@
 // src/content/components/panel.component.js
 
 import { I18nService } from '../../common/i18n.js';
+import { sendMessage } from '../messaging.js';
 import { ContextAnalyzer } from '../utils.js';
 import { DataManager } from '../data.js';
 import { DraggableService } from '../drag.js';
@@ -28,13 +29,13 @@ export class PanelComponent {
         });
 
         panel.innerHTML = `
-            <div class="mal-panel-header" id="malPanelTitle" title="Drag to move">Loading...</div>
+            <div class="mal-panel-header" id="malPanelTitle" title="${I18nService.get('panelDragHint', config.language)}">${I18nService.get('panelLoading', config.language)}</div>
             <div class="mal-control-row" style="flex-direction: column; align-items: stretch; gap: 10px; margin-bottom: 12px;">
                 
                 <div style="display: flex; gap: 8px;">
                     <div class="mal-custom-select" id="malStatusSelectWrapper" style="flex: 1;">
                         <div class="mal-select-trigger" id="malStatusTrigger">
-                            <span id="malStatusLabel">Loading...</span>
+                            <span id="malStatusLabel">${I18nService.get('panelLoading', config.language)}</span>
                             <span class="chevron"></span>
                         </div>
                         <div class="mal-options-container" id="malStatusOptions"></div>
@@ -225,6 +226,7 @@ export class PanelComponent {
 
         statusOptions.querySelectorAll('.mal-option:not(.disabled)').forEach(opt => {
             opt.onclick = (e) => {
+                if (!e.isTrusted) return;
                 const newStatusStr = opt.getAttribute('data-value');
                 statusLabel.innerText = opt.textContent;
                 statusWrapper.classList.remove('open');
@@ -232,7 +234,7 @@ export class PanelComponent {
                 statusWrapper.style.opacity = '0.7';
                 statusWrapper.style.pointerEvents = 'none';
 
-                chrome.runtime.sendMessage({
+                sendMessage({
                     action: "UPDATE_PROGRESS",
                     id: data.id,
                     mediaType: mediaType,
@@ -276,6 +278,7 @@ export class PanelComponent {
 
             scoreOptions.querySelectorAll('.mal-option').forEach(opt => {
                 opt.onclick = (e) => {
+                    if (!e.isTrusted) return;
                     const newScore = parseInt(opt.getAttribute('data-value'));
                     document.getElementById('malScoreLabel').innerText = newScore > 0 ? `★ ${newScore}` : '★ -';
                     scoreWrapper.classList.remove('open');
@@ -283,7 +286,7 @@ export class PanelComponent {
                     scoreWrapper.style.opacity = '0.7';
                     scoreWrapper.style.pointerEvents = 'none';
 
-                    chrome.runtime.sendMessage({
+                    sendMessage({
                         action: "UPDATE_PROGRESS",
                         id: data.id,
                         mediaType: mediaType,
@@ -335,7 +338,7 @@ export class PanelComponent {
             currentDecBtn.disabled = true;
             currentInputEl.disabled = true;
             
-            chrome.runtime.sendMessage({
+            sendMessage({
                 action: "UPDATE_PROGRESS",
                 id: data.id,
                 mediaType: mediaType,
@@ -394,7 +397,7 @@ export class PanelComponent {
                         document.getElementById('malProgressWrap').style.opacity = '0.7';
                         document.getElementById('malPanelTitle').innerText = I18nService.get('statusChecking', config.language);
                         
-                        chrome.runtime.sendMessage({
+                        sendMessage({
                             action: "RESOLVE_CONTINUOUS",
                             id: data.id,
                             mediaType: mediaType,
@@ -410,7 +413,7 @@ export class PanelComponent {
                                 if (resolved.resolvedId !== data.id) {
                                     commitProgressUpdate(maxVal);
 
-                                    chrome.runtime.sendMessage({
+                                    sendMessage({
                                         action: "UPDATE_PROGRESS",
                                         id: resolved.resolvedId,
                                         mediaType: mediaType,
@@ -450,10 +453,10 @@ export class PanelComponent {
                 }
             };
 
-            quickAddBtn.onclick = () => updateProgressOptimistic(data.progress + 1);
-            quickDecBtn.onclick = () => updateProgressOptimistic(data.progress - 1);
+            quickAddBtn.onclick = (e) => { if (e.isTrusted) updateProgressOptimistic(data.progress + 1); };
+            quickDecBtn.onclick = (e) => { if (e.isTrusted) updateProgressOptimistic(data.progress - 1); };
 
-            const newChangeHandler = (e) => updateProgressOptimistic(parseInt(e.target.value, 10));
+            const newChangeHandler = (e) => { if (e.isTrusted) updateProgressOptimistic(parseInt(e.target.value, 10)); };
             const newKeyHandler = (e) => { if (e.key === 'Enter') document.getElementById('malProgressInput').blur(); };
             
             const newInputEl = inputEl.cloneNode(true);

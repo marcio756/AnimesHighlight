@@ -1,9 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Universal MAL Highlighter",
-  "version": "1.7.1",
+  "version": "1.8.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhz7vWs1HOnGTg61gOHr4UvKo/c5kqy/nqoOq+vcqIwzjkmxM9am/R1ZKfRkTu2KI9DBRgxwtO63F/1Kbk5ViXAGxBZJYlK13asj1wt85404OKUqCW8CkF79Woz7gWPz7Jd1QZfmuvqL2+naAXXjcBXEEV/QFMsn+Ffm9Bw0ke31x7yEhCn96eNJpBnkfjthzj1JgsRIjFeH6O+ueinddLe+81OcH37rD1ZyuUYYJn1Md+pkIUyw9u4TW/yUYwg9nj1uvyDeHcAc3vfwU4r2GmDFiiPibqlUGJSIAYj64a5X0c04rhidv9J3dwUynuo1wNcA6QrkOOMfKU3wlzhUCmwIDAQAB",
   "description": "Automatically highlights anime/manga cards and monitors new releases.",
-  "permissions": ["storage", "alarms", "notifications", "tabs", "identity"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "identity",
+    "unlimitedStorage"
+  ],
   "host_permissions": [
     "<all_urls>"
   ],
@@ -16,10 +23,18 @@
   },
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_icon": "icon.png"
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "icons": {
-    "128": "icon.png"
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "background": {
     "service_worker": "src/background/main.js",
@@ -27,19 +42,17 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["dist/content.bundle.js"],
-      "css": ["src/content/styles.css"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "dist/content.bundle.js"
+      ],
+      "css": [
+        "src/content/styles.css"
+      ],
       "all_frames": false
     }
   ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "src/common/*.js"
-      ],
-      "matches": ["<all_urls>"],
-      "use_dynamic_url": true
-    }
-  ]
+  "minimum_chrome_version": "102"
 }
