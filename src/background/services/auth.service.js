@@ -5,7 +5,7 @@
  * @description Handles OAuth2 PKCE flow for MyAnimeList API, token storage, and automatic token refreshing.
  */
 export class AuthService {
-    static CLIENT_ID = 'ea88ed2de2dce587ff8e3e5849c3cf9f';
+    static CLIENT_ID = '8b59dc6973d241f07949990c663edd14';
     // App MAL do tipo "other" (cliente público): usa PKCE e NÃO tem client_secret — nunca colocar um secret neste ficheiro.
 
     /**
