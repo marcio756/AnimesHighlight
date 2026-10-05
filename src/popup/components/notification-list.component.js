@@ -126,7 +126,7 @@ export class NotificationListComponent {
                     if (onUpdateLogs) onUpdateLogs(logs);
                 }
 
-                if (/^https?:///i.test(finalUrl)) window.open(finalUrl, '_blank', 'noopener');
+                if (/^https?:\/\//i.test(finalUrl)) window.open(finalUrl, '_blank', 'noopener');
                 button.textContent = btnOpenText;
                 button.style.opacity = "1";
                 button.style.pointerEvents = "auto";

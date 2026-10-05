@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Universal MAL Highlighter",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhz7vWs1HOnGTg61gOHr4UvKo/c5kqy/nqoOq+vcqIwzjkmxM9am/R1ZKfRkTu2KI9DBRgxwtO63F/1Kbk5ViXAGxBZJYlK13asj1wt85404OKUqCW8CkF79Woz7gWPz7Jd1QZfmuvqL2+naAXXjcBXEEV/QFMsn+Ffm9Bw0ke31x7yEhCn96eNJpBnkfjthzj1JgsRIjFeH6O+ueinddLe+81OcH37rD1ZyuUYYJn1Md+pkIUyw9u4TW/yUYwg9nj1uvyDeHcAc3vfwU4r2GmDFiiPibqlUGJSIAYj64a5X0c04rhidv9J3dwUynuo1wNcA6QrkOOMfKU3wlzhUCmwIDAQAB",
   "description": "Automatically highlights anime/manga cards and monitors new releases.",
   "permissions": [

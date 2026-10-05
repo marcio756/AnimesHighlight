@@ -1,11 +1,11 @@
 {
   "name": "mal-highlighter",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Universal MAL Highlighter - Bundler Configuration",
   "scripts": {
     "build": "node build.js",
     "package": "node build.js && node package.js",
-    "test": "node --test tests/utils.test.mjs"
+    "test": "node --test tests/utils.test.mjs tests/syntax.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.20.0"

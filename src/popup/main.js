@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!urlRaw) return;
 
         try {
-            const urlObj = new URL(/^https?:///i.test(urlRaw) ? urlRaw : `https://${urlRaw}`);
+            const urlObj = new URL(/^https?:\/\//i.test(urlRaw) ? urlRaw : `https://${urlRaw}`);
             if (!['http:', 'https:'].includes(urlObj.protocol) || !urlObj.hostname.includes('.') && urlObj.hostname !== 'localhost') throw new Error('Invalid URL');
             const formattedUrl = urlObj.href;
             
