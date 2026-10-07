@@ -38,3 +38,9 @@ test('detectRelease: finds the next episode link and rejects non-http links', ()
     assert.equal(url, 'https://site.example/anime/frieren-episodio-5');
     assert.equal(ReleaseMonitorService.detectRelease(html, 'Frieren', 9, 'https://site.example/latest'), null);
 });
+
+test('normalize: punctuation separates words and quotes vanish', () => {
+    assert.equal(TextNormalizer.normalize('Re:Zero kara Hajimeru'), 're zero kara hajimeru');
+    assert.equal(TextNormalizer.normalize('"The Laid-Off Mage" Enjoys!'), 'the laid off mage enjoys');
+    assert.equal(TextNormalizer.normalize("Frieren: Beyond Journey's End"), 'frieren beyond journeys end');
+});

@@ -278,29 +278,64 @@ export class MalService {
     static searchCache = new Map();
 
     /**
-     * Searches anime and manga through the rate-limited Jikan queue (cached per session).
+     * Pesquisa anime/manga. Pedidos iguais partilham a mesma promessa (cache por sessão, inclui
+     * pedidos em curso). A Jikan tem fila e é lenta: se não responder em JIKAN_WAIT_MS usa-se a
+     * pesquisa do próprio MAL (rápida, sem limite), que também serve de fallback se a Jikan vier vazia.
      */
-    static async searchItems(title, mediaType) {
+    static searchItems(title, mediaType) {
         const types = mediaType === 'manga' ? ['manga'] : mediaType === 'anime' ? ['anime'] : ['anime', 'manga'];
         const key = `${types.join(',')}|${String(title).toLowerCase()}`;
         if (this.searchCache.has(key)) return this.searchCache.get(key);
 
-        const query = encodeURIComponent(title);
-        const settled = await Promise.allSettled(
-            types.map(type => JikanRateLimiter.schedule(`https://api.jikan.moe/v4/${type}?q=${query}&limit=5`, true))
-        );
+        const promise = this.runSearch(title, types);
+        this.searchCache.set(key, promise);
+        promise.catch(() => { if (this.searchCache.get(key) === promise) this.searchCache.delete(key); });
+        return promise;
+    }
 
-        const results = [];
-        types.forEach((type, i) => {
-            const res = settled[i];
-            if (res.status === 'fulfilled' && Array.isArray(res.value.data)) {
-                results.push(...res.value.data.map(item => ({ ...item, type })));
-            }
+    static JIKAN_WAIT_MS = 3500;
+
+    static async runSearch(title, types) {
+        const query = encodeURIComponent(title);
+        const jikan = Promise.allSettled(
+            types.map(type => JikanRateLimiter.schedule(`https://api.jikan.moe/v4/${type}?q=${query}&limit=5`, true))
+        ).then(settled => {
+            const out = [];
+            types.forEach((type, i) => {
+                const res = settled[i];
+                if (res.status === 'fulfilled' && Array.isArray(res.value.data)) {
+                    out.push(...res.value.data.map(item => ({ ...item, type })));
+                }
+            });
+            return out;
         });
 
-        if (results.length === 0) throw new Error('Not found');
-        this.searchCache.set(key, results);
+        const timeout = new Promise(resolve => setTimeout(() => resolve(null), this.JIKAN_WAIT_MS));
+        let results = await Promise.race([jikan, timeout]);
+
+        if (!results || results.length === 0) {
+            const settled = await Promise.allSettled(types.map(type => this.searchMalPrefix(title, type)));
+            const mal = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+            results = mal.length ? mal : await jikan;
+        }
+
+        if (!results.length) throw new Error('Not found');
         return results;
+    }
+
+    /**
+     * Fallback via autocomplete do próprio MAL, convertido para o formato da Jikan.
+     */
+    static async searchMalPrefix(title, type) {
+        const url = `https://myanimelist.net/search/prefix.json?type=${type}&keyword=${encodeURIComponent(title)}&v=1`;
+        const res = await NetworkService.fetchWithTimeout(url, {}, 8000);
+        if (!res.ok) throw new Error(`MAL search error: ${res.status}`);
+        const json = await res.json();
+        const items = (json.categories || []).flatMap(c => c.items || []);
+        return items
+            .filter(i => i.type === type)
+            .slice(0, 5)
+            .map(i => ({ mal_id: i.id, title: i.name, title_english: null, title_synonyms: [], episodes: 0, chapters: 0, type, fromMalSearch: true }));
     }
 
     /**

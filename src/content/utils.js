@@ -241,8 +241,10 @@ export class TextNormalizer {
         if (!str || str.length < 3) return "";
         
         let clean = String(str).toLowerCase();
-        clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
-        
+        clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        // Aspas/ap\u00f3strofos desaparecem sem partir palavras (don't -> dont); "&" vale "and"
+        clean = clean.replace(/[\u2018\u2019\u201a\u201b\u2032`'"\u201c\u201d\u201e\u00ab\u00bb]/g, "").replace(/&/g, " and ");
+
         // Remove numerações de episódios antes de processar temporadas
         clean = clean.replace(/\b(episodio|episode|ep|capitulo|cap|chapter|ch)\s*[0-9]+\b/g, " "); 
         
@@ -266,7 +268,8 @@ export class TextNormalizer {
         // Transforma TODOS os hífens e pontuação em espaços
         clean = clean.replace(/[\-\[\]\(\)\_\.]/g, " "); 
         
-        clean = clean.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+        // Restante pontuação (: ! ? , / ~ etc.) separa palavras em vez de as colar (re:zero -> re zero)
+        clean = clean.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
         return clean.trim();
     }
 
@@ -293,6 +296,8 @@ export class TextNormalizer {
 export class Matcher {
     static isFuzzyMatch(siteTitle, malTitle) {
         if (siteTitle === malTitle) return true;
+        // Mesmo título com espaçamento diferente (rezero / re zero, kaguyasama / kaguya sama)
+        if (siteTitle.length >= 5 && siteTitle.replace(/\s/g, '') === malTitle.replace(/\s/g, '')) return true;
 
         const baseSite = siteTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
         const baseMal = malTitle.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();

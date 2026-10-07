@@ -76,7 +76,9 @@ export class SearchService {
                             const hasSynonymMatch = apiItem.title_synonyms && Array.isArray(apiItem.title_synonyms)
                                 ? apiItem.title_synonyms.some(syn => Matcher.isFuzzyMatch(cleanQuery, TextNormalizer.normalize(syn))) : false;
                             
-                            if (Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) || hasSynonymMatch) {
+                            // Resultados da pesquisa do MAL vêm só com o título original (ex.: japonês longo):
+                            // aceita-se o primeiro (já ordenado por relevância pelo MAL).
+                            if (apiItem.fromMalSearch || Matcher.isFuzzyMatch(cleanQuery, apiTitleNorm) || (apiTitleEngNorm && Matcher.isFuzzyMatch(cleanQuery, apiTitleEngNorm)) || hasSynonymMatch) {
                                 bestMatch = apiItem;
                                 finalType = apiItem.type;
                                 break;
